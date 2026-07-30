@@ -13,6 +13,7 @@ import { PhoneFrame } from "@/src/components/PhoneFrame";
 import { DEFAULT_LEAD_TIME_ID, LEAD_TIMES } from "@/src/lib/data";
 import type { AlarmConfig, AlarmInput, Screen, Station, Tab, Theme } from "@/src/lib/types";
 import { supabase } from "@/src/lib/supabase";
+import { clearActiveAlarm, saveActiveAlarm } from "@/src/lib/alarm-storage";
 import {
   addStation,
   fetchStations,
@@ -167,6 +168,7 @@ export default function Home() {
       const historyId = crypto.randomUUID();
       historyIdRef.current = historyId;
       historyInsertRef.current = createAlarmHistory(cfg, historyId);
+      saveActiveAlarm(cfg, historyId);
     recordStationUse(cfg.station.id).then(refreshStations);
     setTab("active");
   };
@@ -198,6 +200,7 @@ export default function Home() {
 
       historyIdRef.current = null;
       historyInsertRef.current = null;
+      clearActiveAlarm();
 
       if (historyId) {
         void (async () => {
@@ -220,6 +223,7 @@ export default function Home() {
 
       historyIdRef.current = null;
       historyInsertRef.current = null;
+      clearActiveAlarm();
 
       if (historyId) {
         void (async () => {
