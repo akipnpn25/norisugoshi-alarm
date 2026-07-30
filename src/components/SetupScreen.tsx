@@ -10,7 +10,12 @@ import { TimeWheelPicker } from "@/src/components/TimeWheelPicker";
 import { LEAD_TIMES } from "@/src/lib/data";
 import type { AlarmInput, Station } from "@/src/lib/types";
 import type { StationRow } from "@/src/lib/stations";
-import { calculateAlarmTime, formatTime, isFuture } from "@/src/lib/time";
+import {
+  calculateAlarmTime,
+  formatTime,
+  formatTimeWithDay,
+  isFuture,
+} from "@/src/lib/time";
 
 interface SetupScreenProps {
   input: AlarmInput;
@@ -191,7 +196,7 @@ export function SetupScreen({
         <div className="flex items-center justify-between">
           <span className="text-sm text-muted-foreground">起床時刻</span>
           <span className="text-2xl font-extrabold tabular-nums text-moon">
-            {formatTime(alarmTime)}
+            {formatTimeWithDay(alarmTime)}
           </span>
         </div>
         <div className="my-3.5 h-px bg-border" />
