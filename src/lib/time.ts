@@ -83,8 +83,15 @@ export function formatRemaining(totalSeconds: number): string {
     return `${totalSeconds}秒`;
   }
 
-  const minutes = Math.floor(totalSeconds / 60);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return minutes > 0
+      ? `${hours}時間${minutes}分`
+      : `${hours}時間`;
+  }
 
   if (seconds === 0) {
     return `${minutes}分`;
@@ -92,7 +99,6 @@ export function formatRemaining(totalSeconds: number): string {
 
   return `${minutes}分${seconds}秒`;
 }
-
 export function isFuture(
   date: Date,
   now: Date = new Date()
