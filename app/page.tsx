@@ -40,20 +40,38 @@ function getDefaultArrival(): Date {
   return d;
 }
 
-async function logAlarmHistory(cfg: AlarmConfig, status: string) {
-  try {
-    await supabase.from("alarm_history").insert({
-      station_id: cfg.station.id,
-      station_name: cfg.station.name,
-      arrival_time: cfg.arrivalTime.toISOString(),
-      alarm_time: cfg.alarmTime.toISOString(),
-      lead_time_minutes: cfg.leadTime.minutesBefore,
-      demo_mode: cfg.demoMode.id,
-      earphone_connected: cfg.earphoneConnected,
-      status,
-    });
-  } catch (e) {
-    console.warn("履歴の保存に失敗:", e);
+async function createAlarmHistory(
+  cfg: AlarmConfig,
+  historyId: string
+): Promise<void> {
+  const { error } = await supabase.from("alarm_history").insert({
+    id: historyId,
+    station_id: cfg.station.id,
+    station_name: cfg.station.name,
+    arrival_time: cfg.arrivalTime.toISOString(),
+    alarm_time: cfg.alarmTime.toISOString(),
+    lead_time_minutes: cfg.leadTime.minutesBefore,
+    demo_mode: cfg.demoMode.id,
+    earphone_connected: cfg.earphoneConnected,
+    status: "set",
+  });
+
+  if (error) {
+    console.warn("履歴の作成に失敗:", error);
+  }
+}
+
+async function updateAlarmHistoryStatus(
+  historyId: string,
+  status: "fired" | "cancelled"
+): Promise<void> {
+  const { error } = await supabase
+    .from("alarm_history")
+    .update({ status })
+    .eq("id", historyId);
+
+  if (error) {
+    console.warn("履歴の更新に失敗:", error);
   }
 }
 
@@ -77,6 +95,8 @@ export default function Home() {
   const [stations, setStations] = useState<StationRow[]>([]);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const historyIdRef = useRef<string | null>(null);
+  const historyInsertRef = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
     setAlarmSoundId(getStoredAlarmSound());
@@ -136,12 +156,17 @@ export default function Home() {
   };
 
   const commitAlarm = (cfg: AlarmConfig) => {
+    // 連続クリックなどによる二重設定を防ぐ
+    if (historyIdRef.current) return;
+
     setEarphoneConnected(cfg.earphoneConnected);
     setEarphoneChecked(true);
     setConfig(cfg);
     setScreen("rest");
     scheduleAlarm(cfg);
-    logAlarmHistory(cfg, "set");
+      const historyId = crypto.randomUUID();
+      historyIdRef.current = historyId;
+      historyInsertRef.current = createAlarmHistory(cfg, historyId);
     recordStationUse(cfg.station.id).then(refreshStations);
     setTab("active");
   };
@@ -168,7 +193,18 @@ export default function Home() {
       timerRef.current = null;
     }
     stopAlarm();
-    if (config) logAlarmHistory(config, "cancelled");
+      const historyId = historyIdRef.current;
+      const insertPromise = historyInsertRef.current;
+
+      historyIdRef.current = null;
+      historyInsertRef.current = null;
+
+      if (historyId) {
+        void (async () => {
+          if (insertPromise) await insertPromise;
+          await updateAlarmHistoryStatus(historyId, "cancelled");
+        })();
+      }
     setConfig(null);
     setTab("alarm");
   };
@@ -179,7 +215,18 @@ export default function Home() {
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
-    if (config) logAlarmHistory(config, "fired");
+      const historyId = historyIdRef.current;
+      const insertPromise = historyInsertRef.current;
+
+      historyIdRef.current = null;
+      historyInsertRef.current = null;
+
+      if (historyId) {
+        void (async () => {
+          if (insertPromise) await insertPromise;
+          await updateAlarmHistoryStatus(historyId, "fired");
+        })();
+      }
     setConfig(null);
     setTab("home");
   };
