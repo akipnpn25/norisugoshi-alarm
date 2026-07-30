@@ -49,6 +49,9 @@ export function SetupScreen({
   const leadTime =
     LEAD_TIMES.find((l) => l.id === input.leadTimeId) ?? LEAD_TIMES[1];
   const alarmTime = calculateAlarmTime(input.arrivalTime, leadTime);
+  const hoursUntilArrival =
+    (input.arrivalTime.getTime() - Date.now()) / 3600000;
+  const isLongWait = hoursUntilArrival > 6;
 
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
@@ -207,6 +210,13 @@ export function SetupScreen({
           </span>
         </div>
       </Card>
+
+      {isLongWait && (
+        <p className="mt-5 rounded-2xl border border-moon/30 bg-moon/10 px-4 py-3 text-center text-sm font-bold text-moon">
+          ⚠ 到着まで{Math.floor(hoursUntilArrival)}時間あります。
+          明日の時刻で合っていますか？
+        </p>
+      )}
 
       <Button
         onClick={onSetAlarm}
