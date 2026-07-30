@@ -7,7 +7,7 @@ import { Button } from "@/src/components/ui/button";
 import { Card } from "@/src/components/ui/card";
 import { Progress } from "@/src/components/ui/progress";
 import type { AlarmConfig } from "@/src/lib/types";
-import { formatRemaining, formatTime, secondsUntil } from "@/src/lib/time";
+import { formatRemaining, formatTimeWithDay, secondsUntil } from "@/src/lib/time";
 
 interface RestScreenProps {
   config: AlarmConfig;
@@ -62,7 +62,7 @@ export function RestScreen({ config, onCancel }: RestScreenProps) {
         <StatusRow
           icon={<Clock size={22} />}
           label="起床予定"
-          value={formatTime(config.alarmTime)}
+          value={formatTimeWithDay(config.alarmTime, now)}
           ok
         />
       </Card>
@@ -89,7 +89,7 @@ export function RestScreen({ config, onCancel }: RestScreenProps) {
         {arrived ? "まもなく起床時刻です" : "安心しておやすみください"}
       </p>
       <p className="mb-8 text-center text-[13px] text-muted-foreground">
-        {formatTime(config.arrivalTime)} 到着予定
+        {formatTimeWithDay(config.arrivalTime, now)} 到着予定
         {isDemo ? " （デモモード実行中）" : ""}
       </p>
 

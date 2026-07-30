@@ -5,7 +5,7 @@ import { Sun, MapPin, Hand } from "lucide-react";
 
 import { Button } from "@/src/components/ui/button";
 import type { AlarmConfig } from "@/src/lib/types";
-import { formatTime } from "@/src/lib/time";
+import { formatTimeWithDay } from "@/src/lib/time";
 
 interface AlarmScreenProps {
   config: AlarmConfig;
@@ -38,7 +38,7 @@ export function AlarmScreen({ config, onStop }: AlarmScreenProps) {
         まもなく{config.station.name}です
       </p>
       <p className="mt-2.5 text-base text-muted-foreground">
-        {formatTime(config.arrivalTime)} 到着予定
+        {formatTimeWithDay(config.arrivalTime)} 到着予定
       </p>
 
       <div className="h-16" />

@@ -6,6 +6,35 @@ export function formatTime(date: Date): string {
   return `${h}:${m}`;
 }
 
+export function formatTimeWithDay(
+  date: Date,
+  now: Date = new Date()
+): string {
+  const targetDay = Date.UTC(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate()
+  );
+  const currentDay = Date.UTC(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate()
+  );
+  const diffDays = Math.round(
+    (targetDay - currentDay) / 86400000
+  );
+
+  if (diffDays === 1) {
+    return `明日 ${formatTime(date)}`;
+  }
+
+  if (diffDays !== 0) {
+    return formatDateTime(date);
+  }
+
+  return formatTime(date);
+}
+
 export function calculateAlarmTime(
   arrival: Date,
   lead: LeadTimeOption
