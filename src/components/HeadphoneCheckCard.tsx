@@ -1,11 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { Headphones, AlertTriangle } from "lucide-react";
+import {
+  Headphones,
+  AlertTriangle,
+  Volume2,
+} from "lucide-react";
 
 import { Button } from "@/src/components/ui/button";
 import { Card } from "@/src/components/ui/card";
 import { getAudioRoute } from "@/src/lib/headphone";
+import {
+  getStoredAlarmSound,
+  previewSound,
+} from "@/src/lib/sound";
 
 interface HeadphoneCheckCardProps {
   checked: boolean;
@@ -58,12 +66,28 @@ export function HeadphoneCheckCard({
         {routeName && (
           <p className="mt-2 text-xs text-muted-foreground">接続機器: {routeName}</p>
         )}
-        <button
-          onClick={check}
-          className="mt-3.5 rounded-xl bg-night-surface px-4 py-2 text-[13px] font-bold text-foreground transition-colors hover:opacity-80"
-        >
-          再確認
-        </button>
+        <p className="mt-3 text-center text-xs text-muted-foreground">
+          実際にイヤホンから聞こえるか確認してください
+        </p>
+
+        <div className="mt-3.5 flex gap-2">
+          <button
+            onClick={() =>
+              previewSound(getStoredAlarmSound())
+            }
+            className="flex items-center gap-1.5 rounded-xl bg-moon px-4 py-2 text-[13px] font-bold text-night-deep transition-opacity hover:opacity-90"
+          >
+            <Volume2 size={15} />
+            試し音を再生
+          </button>
+
+          <button
+            onClick={check}
+            className="rounded-xl bg-night-surface px-4 py-2 text-[13px] font-bold text-foreground transition-colors hover:opacity-80"
+          >
+            再確認
+          </button>
+        </div>
       </Card>
     );
   }
