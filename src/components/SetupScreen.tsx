@@ -125,8 +125,16 @@ export function SetupScreen({
         hour={input.arrivalTime.getHours()}
         minute={input.arrivalTime.getMinutes()}
         onComplete={(h, m) => {
-          const newDate = new Date(input.arrivalTime);
+          const now = new Date();
+          const newDate = new Date();
+
           newDate.setHours(h, m, 0, 0);
+
+          // 選んだ時刻が現在以前なら、翌日の時刻として扱う
+          if (newDate.getTime() <= now.getTime()) {
+            newDate.setDate(newDate.getDate() + 1);
+          }
+
           onInputChange({ arrivalTime: newDate });
         }}
       />
