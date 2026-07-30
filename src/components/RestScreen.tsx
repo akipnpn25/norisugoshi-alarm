@@ -15,7 +15,8 @@ interface RestScreenProps {
 }
 
 export function RestScreen({ config, onCancel }: RestScreenProps) {
-  const [now, setNow] = useState(new Date());
+  const [now, setNow] = useState(() => new Date());
+  const [startedAt] = useState(() => new Date());
   const isDemo = config.demoMode.offsetSeconds !== null;
 
   useEffect(() => {
@@ -26,12 +27,15 @@ export function RestScreen({ config, onCancel }: RestScreenProps) {
   const secs = secondsUntil(config.alarmTime, now);
   const arrived = secs <= 0;
 
-  // 進捗バー: 全体の時間に対する残り時間の割合
+  // 進捗バー: この画面を開いてから起床時刻までの経過割合
   const totalSecs = Math.max(
     1,
-    Math.ceil((config.alarmTime.getTime() - config.arrivalTime.getTime() + config.leadTime.minutesBefore * 60000) / 1000)
+    secondsUntil(config.alarmTime, startedAt)
   );
-  const progress = Math.max(0, Math.min(100, ((totalSecs - secs) / totalSecs) * 100));
+  const progress = Math.max(
+    0,
+    Math.min(100, ((totalSecs - secs) / totalSecs) * 100)
+  );
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col px-6 py-8 animate-fade-in">
