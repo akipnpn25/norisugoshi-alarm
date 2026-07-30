@@ -50,3 +50,57 @@ export function clearActiveAlarm(): void {
     console.warn("保存したアラーム設定の削除に失敗:", error);
   }
 }
+
+export function loadActiveAlarm(): {
+  config: AlarmConfig;
+  historyId: string;
+} | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.localStorage.getItem(
+      ACTIVE_ALARM_STORAGE_KEY
+    );
+
+    if (!raw) return null;
+
+    const stored = JSON.parse(raw) as StoredActiveAlarm;
+    const arrivalTime = new Date(stored.arrivalTime);
+    const alarmTime = new Date(stored.alarmTime);
+
+    const invalid =
+      !stored.station ||
+      !stored.leadTime ||
+      !stored.demoMode ||
+      !stored.historyId ||
+      Number.isNaN(arrivalTime.getTime()) ||
+      Number.isNaN(alarmTime.getTime());
+
+    if (invalid) {
+      clearActiveAlarm();
+      return null;
+    }
+
+    return {
+      config: {
+        station: stored.station,
+        arrivalTime,
+        leadTime: stored.leadTime,
+        alarmTime,
+        demoMode: stored.demoMode,
+        earphoneConnected: Boolean(
+          stored.earphoneConnected
+        ),
+      },
+      historyId: stored.historyId,
+    };
+  } catch (error) {
+    console.warn(
+      "保存したアラーム設定の読み込みに失敗:",
+      error
+    );
+    clearActiveAlarm();
+    return null;
+  }
+}
+

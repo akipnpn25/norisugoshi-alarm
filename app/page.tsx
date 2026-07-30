@@ -13,7 +13,11 @@ import { PhoneFrame } from "@/src/components/PhoneFrame";
 import { DEFAULT_LEAD_TIME_ID, LEAD_TIMES } from "@/src/lib/data";
 import type { AlarmConfig, AlarmInput, Screen, Station, Tab, Theme } from "@/src/lib/types";
 import { supabase } from "@/src/lib/supabase";
-import { clearActiveAlarm, saveActiveAlarm } from "@/src/lib/alarm-storage";
+import {
+  clearActiveAlarm,
+  loadActiveAlarm,
+  saveActiveAlarm,
+} from "@/src/lib/alarm-storage";
 import {
   addStation,
   fetchStations,
@@ -141,6 +145,35 @@ export default function Home() {
     }
     timerRef.current = setTimeout(() => fireAlarm(), delay);
   };
+
+  useEffect(() => {
+    const storedAlarm = loadActiveAlarm();
+
+    if (!storedAlarm) return;
+
+    const {
+      config: restoredConfig,
+      historyId,
+    } = storedAlarm;
+
+    historyIdRef.current = historyId;
+    historyInsertRef.current = null;
+
+    setInput({
+      station: restoredConfig.station,
+      arrivalTime: restoredConfig.arrivalTime,
+      leadTimeId: restoredConfig.leadTime.id,
+    });
+
+    setEarphoneConnected(
+      restoredConfig.earphoneConnected
+    );
+    setEarphoneChecked(true);
+    setConfig(restoredConfig);
+    setScreen("rest");
+    scheduleAlarm(restoredConfig);
+    setTab("active");
+  }, []);
 
   const handleInputChange = (patch: Partial<AlarmInput>) => {
     setInput((prev) => ({ ...prev, ...patch }));
