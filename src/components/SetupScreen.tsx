@@ -44,6 +44,15 @@ export function SetupScreen({
   const leadTime =
     LEAD_TIMES.find((l) => l.id === input.leadTimeId) ?? LEAD_TIMES[1];
   const alarmTime = calculateAlarmTime(input.arrivalTime, leadTime);
+
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  const isArrivalTomorrow =
+    input.arrivalTime.getFullYear() === tomorrow.getFullYear() &&
+    input.arrivalTime.getMonth() === tomorrow.getMonth() &&
+    input.arrivalTime.getDate() === tomorrow.getDate();
+
   const ready =
     input.station !== null &&
     earphoneChecked &&
@@ -138,6 +147,12 @@ export function SetupScreen({
           onInputChange({ arrivalTime: newDate });
         }}
       />
+
+      {isArrivalTomorrow && (
+        <p className="mt-2 text-center text-sm font-bold text-moon">
+          明日 {formatTime(input.arrivalTime)}として設定します
+        </p>
+      )}
 
       {/* 3. 起こすタイミング */}
       <SectionLabel num="3" text="起こすタイミング" icon={<Bell size={16} />} />
