@@ -1,0 +1,122 @@
+"use client";
+
+import { Settings, Moon, Sun, Headphones, Volume2, Check, Play } from "lucide-react";
+
+import { Card } from "@/src/components/ui/card";
+import { HeadphoneCheckCard } from "@/src/components/HeadphoneCheckCard";
+import type { Theme } from "@/src/lib/types";
+import { ALARM_SOUNDS, type AlarmSoundId } from "@/src/lib/sound";
+
+interface SettingsScreenProps {
+  theme: Theme;
+  onToggleTheme: () => void;
+  earphoneChecked: boolean;
+  earphoneConnected: boolean;
+  routeName: string;
+  onHeadphoneCheckEnd: (connected: boolean, name: string, error: string | null) => void;
+  alarmSoundId: AlarmSoundId;
+  onSelectAlarmSound: (id: AlarmSoundId) => void;
+}
+
+export function SettingsScreen({
+  theme,
+  onToggleTheme,
+  earphoneChecked,
+  earphoneConnected,
+  routeName,
+  onHeadphoneCheckEnd,
+  alarmSoundId,
+  onSelectAlarmSound,
+}: SettingsScreenProps) {
+  return (
+    <div className="mx-auto min-h-full max-w-md px-5 pb-6 pt-4 animate-fade-in">
+      {/* ヘッダー */}
+      <div className="mb-6">
+        <h1 className="text-2xl font-extrabold text-foreground flex items-center gap-2">
+          <Settings className="text-moon" size={28} />
+          設定
+        </h1>
+        <p className="mt-1.5 text-sm text-muted-foreground">
+          テーマ・アラーム音・イヤホン確認
+        </p>
+      </div>
+
+      {/* テーマ */}
+      <p className="mb-3 text-base font-bold text-foreground">テーマ</p>
+      <button
+        onClick={onToggleTheme}
+        className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card px-4 py-4 transition-colors hover:bg-night-surface"
+      >
+        {theme === "night" ? (
+          <Moon size={22} className="text-moon" />
+        ) : (
+          <Sun size={22} className="text-moon" />
+        )}
+        <span className="flex-1 text-left text-base font-bold text-foreground">
+          {theme === "night" ? "ナイトモード" : "デイモード"}
+        </span>
+        <span className="text-[13px] text-muted-foreground">タップで切替</span>
+      </button>
+
+      {/* アラーム音 */}
+      <p className="mb-3 mt-6 text-base font-bold text-foreground flex items-center gap-1.5">
+        <Volume2 size={18} className="text-moon" />
+        アラーム音
+      </p>
+      <div className="grid grid-cols-1 gap-2">
+        {ALARM_SOUNDS.map((s) => {
+          const selected = s.id === alarmSoundId;
+          return (
+            <button
+              key={s.id}
+              onClick={() => onSelectAlarmSound(s.id)}
+              className={`flex w-full items-center gap-3 rounded-2xl border px-4 py-3.5 text-left transition-all active:scale-[0.98] ${
+                selected
+                  ? "border-moon/60 bg-moon/12"
+                  : "border-border bg-card hover:bg-night-surface"
+              }`}
+            >
+              <span className="flex-1">
+                <span className="block text-[15px] font-bold text-foreground">
+                  {s.label}
+                </span>
+                <span className="block text-[12px] text-muted-foreground">
+                  {s.description}
+                </span>
+              </span>
+              <span
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors ${
+                  selected
+                    ? "bg-moon text-night-deep"
+                    : "bg-night-surface text-muted-foreground"
+                }`}
+              >
+                {selected ? <Check size={16} /> : <Play size={16} />}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* イヤホン接続確認 */}
+      <p className="mb-3 mt-6 text-base font-bold text-foreground flex items-center gap-1.5">
+        <Headphones size={18} className="text-moon" />
+        イヤホン接続確認
+      </p>
+      <HeadphoneCheckCard
+        checked={earphoneChecked}
+        connected={earphoneConnected}
+        routeName={routeName}
+        onCheckEnd={onHeadphoneCheckEnd}
+      />
+
+      {/* 説明 */}
+      <Card className="mt-6 bg-card px-5 py-4">
+        <p className="text-[13px] leading-relaxed text-muted-foreground">
+          アラームはイヤホンを通して再生されます。上で接続状態を確認できます。
+          アラーム音はタップして試聴できます。
+        </p>
+      </Card>
+    </div>
+  );
+}

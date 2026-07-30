@@ -1,0 +1,247 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Night mode (default) — deep moonlit sky for counting sheep */
+    --night: 220 44% 11%;
+    --night-deep: 222 52% 6%;
+    --night-card: 220 38% 16%;
+    --night-surface: 220 40% 21%;
+    --moon: 43 58% 82%;
+    --moon-soft: 47 75% 91%;
+    --moon-dim: 41 40% 68%;
+    --background: var(--night);
+    --foreground: 215 35% 95%;
+    --card: 0 0% 100% / 0.05;
+    --card-foreground: 215 35% 95%;
+    --popover: var(--night-card);
+    --popover-foreground: 215 35% 95%;
+    --primary: var(--moon);
+    --primary-foreground: var(--night-deep);
+    --secondary: var(--night-surface);
+    --secondary-foreground: 215 35% 95%;
+    --muted: 218 16% 48%;
+    --muted-foreground: 218 18% 66%;
+    --accent: var(--moon-dim);
+    --accent-foreground: var(--night-deep);
+    --destructive: 0 74% 70%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 152 58% 64%;
+    --success-foreground: var(--night-deep);
+    --warning: 38 88% 56%;
+    --warning-foreground: var(--night-deep);
+    --border: 43 58% 82% / 0.14;
+    --input: var(--night-surface);
+    --ring: var(--moon);
+    --radius: 1.5rem;
+    --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  }
+
+  /* Day mode — dawn sky, soft clouds, warm sunrise (still dreamy) */
+  .theme-day {
+    --night: 205 52% 88%;
+    --night-deep: 205 48% 82%;
+    --night-card: 0 0% 100%;
+    --night-surface: 205 45% 84%;
+    --moon: 34 78% 55%;
+    --moon-soft: 40 90% 72%;
+    --moon-dim: 32 55% 48%;
+    --background: var(--night);
+    --foreground: 215 35% 22%;
+    --card: 215 30% 22% / 0.04;
+    --card-foreground: 215 35% 22%;
+    --popover: var(--night-card);
+    --popover-foreground: 215 35% 22%;
+    --primary: var(--moon);
+    --primary-foreground: 0 0% 100%;
+    --secondary: var(--night-surface);
+    --secondary-foreground: 215 35% 22%;
+    --muted: 205 18% 55%;
+    --muted-foreground: 205 18% 42%;
+    --accent: var(--moon-dim);
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 72% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 145 55% 40%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 85% 48%;
+    --warning-foreground: 0 0% 100%;
+    --border: 215 30% 22% / 0.10;
+    --input: var(--night-surface);
+    --ring: var(--moon);
+  }
+
+  * {
+    border-color: hsl(var(--border));
+  }
+
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-feature-settings: "rlig" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
+    transition: background-color 0.5s ease, color 0.5s ease;
+    overflow: hidden;
+  }
+}
+
+@layer utilities {
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* ===== Night: gradient sky ===== */
+  .sky-night {
+    background:
+      linear-gradient(to bottom,
+        hsl(222 55% 5%) 0%,
+        hsl(220 48% 8%) 30%,
+        hsl(218 42% 12%) 60%,
+        hsl(216 36% 16%) 85%,
+        hsl(214 30% 18%) 100%
+      );
+  }
+
+  /* ===== Night: starfield (denser, with twinkle) ===== */
+  .starfield {
+    background-image:
+      radial-gradient(1.6px 1.6px at 24px 38px, hsl(0 0% 100% / 0.7), transparent 55%),
+      radial-gradient(1px 1px at 86px 72px, hsl(0 0% 100% / 0.4), transparent 55%),
+      radial-gradient(1.8px 1.8px at 146px 26px, hsl(47 75% 91% / 0.6), transparent 55%),
+      radial-gradient(1px 1px at 190px 124px, hsl(0 0% 100% / 0.35), transparent 55%),
+      radial-gradient(1.3px 1.3px at 56px 158px, hsl(0 0% 100% / 0.5), transparent 55%),
+      radial-gradient(1.5px 1.5px at 214px 184px, hsl(0 0% 100% / 0.42), transparent 55%),
+      radial-gradient(1px 1px at 118px 214px, hsl(0 0% 100% / 0.33), transparent 55%),
+      radial-gradient(1.2px 1.2px at 28px 226px, hsl(47 75% 91% / 0.5), transparent 55%),
+      radial-gradient(1px 1px at 172px 96px, hsl(0 0% 100% / 0.3), transparent 55%),
+      radial-gradient(1.4px 1.4px at 98px 172px, hsl(0 0% 100% / 0.45), transparent 55%);
+    background-size: 250px 250px;
+    background-repeat: repeat;
+    -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0.6) 40%, rgba(0,0,0,0.15) 75%, transparent 92%);
+            mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0.6) 40%, rgba(0,0,0,0.15) 75%, transparent 92%);
+  }
+
+  /* ===== Night: crescent moon ===== */
+  .crescent-moon {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    box-shadow: 14px 14px 0 0 hsl(43 58% 82%);
+    background: transparent;
+  }
+
+  /* ===== Night: moon glow halo ===== */
+  .moon-glow {
+    background: radial-gradient(closest-side,
+      hsl(43 58% 82% / 0.28),
+      hsl(43 58% 82% / 0.12) 40%,
+      hsl(43 58% 82% / 0.04) 65%,
+      transparent 80%
+    );
+  }
+
+  /* ===== Night: misty clouds at horizon ===== */
+  .night-mist {
+    background:
+      radial-gradient(ellipse 180px 40px at 20% 92%, hsl(220 30% 20% / 0.5), transparent 70%),
+      radial-gradient(ellipse 220px 50px at 70% 96%, hsl(218 28% 18% / 0.45), transparent 70%),
+      radial-gradient(ellipse 160px 35px at 45% 88%, hsl(222 32% 22% / 0.35), transparent 70%);
+  }
+
+  /* ===== Day: dawn gradient sky ===== */
+  .sky-day {
+    background:
+      linear-gradient(to bottom,
+        hsl(205 55% 78%) 0%,
+        hsl(200 48% 84%) 25%,
+        hsl(30 45% 90%) 60%,
+        hsl(28 50% 93%) 80%,
+        hsl(32 40% 95%) 100%
+      );
+  }
+
+  /* ===== Day: warm sun glow ===== */
+  .sun-glow {
+    background: radial-gradient(closest-side,
+      hsl(40 90% 75% / 0.35),
+      hsl(36 85% 70% / 0.18) 40%,
+      hsl(32 70% 65% / 0.06) 65%,
+      transparent 80%
+    );
+  }
+
+  /* ===== Day: fluffy clouds ===== */
+  .cloud {
+    background: hsl(0 0% 100% / 0.75);
+    border-radius: 100px;
+  }
+  .cloud::before,
+  .cloud::after {
+    content: "";
+    position: absolute;
+    background: inherit;
+    border-radius: 50%;
+  }
+
+  /* ===== Day: soft cloud layer (repeating gradient) ===== */
+  .cloud-field {
+    background-image:
+      radial-gradient(ellipse 90px 28px at 15% 18%, hsl(0 0% 100% / 0.6), transparent 65%),
+      radial-gradient(ellipse 120px 32px at 60% 12%, hsl(0 0% 100% / 0.5), transparent 65%),
+      radial-gradient(ellipse 70px 22px at 85% 28%, hsl(0 0% 100% / 0.45), transparent 65%),
+      radial-gradient(ellipse 100px 30px at 35% 42%, hsl(0 0% 100% / 0.4), transparent 65%),
+      radial-gradient(ellipse 80px 25px at 75% 55%, hsl(0 0% 100% / 0.35), transparent 65%);
+    background-size: 300px 300px;
+    background-repeat: repeat;
+  }
+
+  /* ===== Visibility control ===== */
+  .theme-day .sky-night,
+  .theme-day .starfield,
+  .theme-day .moon-glow,
+  .theme-day .crescent-moon,
+  .theme-day .night-mist {
+    opacity: 0;
+  }
+
+  .sky-day,
+  .sun-glow,
+  .cloud-field {
+    opacity: 0;
+  }
+  .theme-day .sky-day,
+  .theme-day .sun-glow,
+  .theme-day .cloud-field {
+    opacity: 1;
+  }
+}
+
+/* ===== Keyframes ===== */
+@keyframes twinkle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+@keyframes cloud-drift {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-300px); }
+}
+@keyframes mist-float {
+  0%, 100% { transform: translateX(0); opacity: 0.7; }
+  50% { transform: translateX(20px); opacity: 1; }
+}
+
+/* PC表示時、フレーム内で min-h-screen を 100% に上書き */
+@media (min-width: 1024px) {
+  .phone-frame-screen .min-h-screen {
+    min-height: 100%;
+  }
+}
