@@ -41,10 +41,10 @@ export function PhoneFrame({
           />
 
           {/* 月の光ハロー (夜のみ) */}
-          <div className="pointer-events-none absolute -top-16 right-4 z-0 h-48 w-48 rounded-full moon-glow" />
+          <div className="pointer-events-none absolute top-4 right-2 z-0 h-44 w-44 rounded-full moon-glow" />
 
           {/* 三日月 (夜のみ) */}
-          <div className="pointer-events-none absolute top-6 right-8 z-0 crescent-moon" />
+          <div className="pointer-events-none absolute top-20 right-8 z-0 crescent-moon" />
 
           {/* 夜霧 (夜のみ) */}
           <div className="pointer-events-none absolute inset-0 z-0 night-mist" />
