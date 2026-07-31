@@ -278,11 +278,11 @@ function StationAddModal({
 }) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-night-deep/70 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-night-deep/70 px-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] backdrop-blur-sm animate-fade-in"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-t-3xl border-t border-moon/30 bg-night-card p-6 pb-8 animate-scale-in"
+        className="max-h-[calc(100dvh-env(safe-area-inset-top)-1.5rem)] w-full max-w-md overflow-y-auto rounded-3xl border border-moon/30 bg-night-card p-6 shadow-2xl animate-scale-in"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
