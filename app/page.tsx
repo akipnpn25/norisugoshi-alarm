@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { AlarmScreen } from "@/src/components/AlarmScreen";
 import { BreakSetupScreen } from "@/src/components/BreakSetupScreen";
 import { HistoryScreen } from "@/src/components/HistoryScreen";
+import { ImmediateRecommendationCard } from "@/src/components/ImmediateRecommendationCard";
 import { HomeScreen } from "@/src/components/HomeScreen";
 import { PhoneFrame } from "@/src/components/PhoneFrame";
 import { RestScreen } from "@/src/components/RestScreen";
@@ -56,6 +57,15 @@ import {
   toLocalDateKey,
 } from "@/src/lib/schedule-storage";
 import { supabase } from "@/src/lib/supabase";
+import {
+  clearPendingWakeStyle,
+  getPendingWakeStyles,
+  getStrongerWakeStyle,
+  recordTimedResponse,
+  setPendingWakeStyle,
+  type ImmediateRecommendation,
+  type RecommendationMode,
+} from "@/src/lib/recommendation";
 import { calculateAlarmTime } from "@/src/lib/time";
 import type {
   AlarmConfig,
@@ -294,6 +304,14 @@ export default function Home() {
     useState(false);
   const [routeName, setRouteName] = useState("");
   const [stations, setStations] = useState<StationRow[]>([]);
+  const [
+    immediateRecommendation,
+    setImmediateRecommendation,
+  ] = useState<ImmediateRecommendation | null>(null);
+  const [pendingWakeStyles, setPendingWakeStyles] =
+    useState<
+      Partial<Record<RecommendationMode, WakeStyleId>>
+    >({});
 
   const timerRef =
     useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -326,6 +344,7 @@ export default function Home() {
 
   useEffect(() => {
     setAlarmSoundId(getStoredAlarmSound());
+    setPendingWakeStyles(getPendingWakeStyles());
     setRecurringSchedules(loadRecurringSchedules());
     setSchedulesReady(true);
     setInput((prev) => ({
@@ -508,6 +527,13 @@ export default function Home() {
   const handleWakeStyleChange = (
     wakeStyleId: WakeStyleId
   ) => {
+    clearPendingWakeStyle("transit");
+    setPendingWakeStyles((current) => {
+      const next = { ...current };
+      delete next.transit;
+
+      return next;
+    });
     setInput((prev) => ({ ...prev, wakeStyleId }));
     storeWakeStyle("transit", wakeStyleId);
   };
@@ -515,6 +541,13 @@ export default function Home() {
   const handleBreakWakeStyleChange = (
     wakeStyleId: WakeStyleId
   ) => {
+    clearPendingWakeStyle("break");
+    setPendingWakeStyles((current) => {
+      const next = { ...current };
+      delete next.break;
+
+      return next;
+    });
     setBreakInput((prev) => ({
       ...prev,
       wakeStyleId,
@@ -530,6 +563,58 @@ export default function Home() {
     setEarphoneConnected(connected);
     setEarphoneChecked(true);
     setRouteName(name);
+  };
+
+  const applyPendingWakeStyle = (
+    cfg: AlarmConfig
+  ): AlarmConfig => {
+    if (
+      cfg.mode !== "transit" &&
+      cfg.mode !== "break"
+    ) {
+      return cfg;
+    }
+
+    const mode = cfg.mode;
+    const pendingWakeStyleId =
+      pendingWakeStyles[mode];
+
+    if (!pendingWakeStyleId) {
+      return cfg;
+    }
+
+    const pendingWakeStyle =
+      WAKE_STYLES.find(
+        (style) => style.id === pendingWakeStyleId
+      ) ?? cfg.wakeStyle;
+
+    clearPendingWakeStyle(mode);
+    setPendingWakeStyles((current) => {
+      const next = { ...current };
+      delete next[mode];
+
+      return next;
+    });
+
+    const storedWakeStyleId =
+      getStoredWakeStyle(mode);
+
+    if (mode === "transit") {
+      setInput((current) => ({
+        ...current,
+        wakeStyleId: storedWakeStyleId,
+      }));
+    } else {
+      setBreakInput((current) => ({
+        ...current,
+        wakeStyleId: storedWakeStyleId,
+      }));
+    }
+
+    return {
+      ...cfg,
+      wakeStyle: pendingWakeStyle,
+    };
   };
 
   const commitAlarm = (cfg: AlarmConfig) => {
@@ -573,7 +658,9 @@ recurringActionRef.current = (
 
   setSetupMode(occurrence.schedule.mode);
   setShowSchedules(false);
-  commitAlarm(recurringConfig);
+  commitAlarm(
+    applyPendingWakeStyle(recurringConfig)
+  );
 };
 
 useEffect(() => {
@@ -729,7 +816,7 @@ const handleToggleTodaySkip = (
       earphoneConnected,
     };
 
-    commitAlarm(cfg);
+    commitAlarm(applyPendingWakeStyle(cfg));
   };
 
   const handleSetBreak = () => {
@@ -768,7 +855,7 @@ const handleToggleTodaySkip = (
         durationMinutes > 5,
     };
 
-    commitAlarm(cfg);
+    commitAlarm(applyPendingWakeStyle(cfg));
   };
 
   const finishHistory = (
@@ -817,6 +904,73 @@ const handleToggleTodaySkip = (
     });
   };
 
+  const handleTryRecommendation = () => {
+    if (
+      !immediateRecommendation?.recommendedWakeStyleId
+    ) {
+      return;
+    }
+
+    const {
+      mode,
+      recommendedWakeStyleId,
+    } = immediateRecommendation;
+
+    setPendingWakeStyle(
+      mode,
+      recommendedWakeStyleId
+    );
+    setPendingWakeStyles((current) => ({
+      ...current,
+      [mode]: recommendedWakeStyleId,
+    }));
+
+    if (mode === "transit") {
+      setInput((current) => ({
+        ...current,
+        wakeStyleId: recommendedWakeStyleId,
+      }));
+    } else {
+      setBreakInput((current) => ({
+        ...current,
+        wakeStyleId: recommendedWakeStyleId,
+      }));
+    }
+
+    setImmediateRecommendation(null);
+  };
+
+  const handleKeepCurrent = () => {
+    setImmediateRecommendation(null);
+  };
+
+  const handleCancelPendingWakeStyle = (
+    mode: RecommendationMode
+  ) => {
+    clearPendingWakeStyle(mode);
+    setPendingWakeStyles((current) => {
+      const next = { ...current };
+      delete next[mode];
+
+      return next;
+    });
+
+    const storedWakeStyleId =
+      getStoredWakeStyle(mode);
+
+    if (mode === "transit") {
+      setInput((current) => ({
+        ...current,
+        wakeStyleId: storedWakeStyleId,
+      }));
+    } else {
+      setBreakInput((current) => ({
+        ...current,
+        wakeStyleId: storedWakeStyleId,
+      }));
+    }
+  };
+
   const handleCancel = () => {
     clearScheduleTimers();
     stopAlarm();
@@ -829,6 +983,7 @@ const handleToggleTodaySkip = (
   };
 
   const handleStop = () => {
+    const completedConfig = config;
     const stoppedAt = new Date();
     const alarmFiredAt = alarmFiredAtRef.current;
     const firstInteractionAt =
@@ -860,6 +1015,46 @@ const handleToggleTodaySkip = (
           ),
         }
       : undefined;
+
+    if (
+      completedConfig &&
+      firstInteractionAt &&
+      (completedConfig.mode === "transit" ||
+        completedConfig.mode === "break")
+    ) {
+      const mode = completedConfig.mode;
+      const deadline =
+        mode === "transit"
+          ? completedConfig.arrivalTime
+          : new Date(
+              completedConfig.alarmTime.getTime() +
+                60 * 1000
+            );
+      const respondedOnTime =
+        firstInteractionAt.getTime() <=
+        deadline.getTime();
+      const consecutiveLateCount =
+        recordTimedResponse(mode, respondedOnTime);
+
+      setSetupMode(mode);
+
+      if (respondedOnTime) {
+        setImmediateRecommendation(null);
+      } else {
+        setImmediateRecommendation({
+          mode,
+          currentWakeStyleId:
+            completedConfig.wakeStyle.id,
+          recommendedWakeStyleId:
+            getStrongerWakeStyle(
+              completedConfig.wakeStyle.id
+            ),
+          consecutiveLateCount,
+        });
+      }
+    } else {
+      setImmediateRecommendation(null);
+    }
 
     finishHistory("fired", timing);
     alarmFiredAtRef.current = null;
@@ -1033,6 +1228,31 @@ const handleToggleTodaySkip = (
                     onOpen={() =>
                       setShowSchedules(true)
                     }
+                  />
+
+                  <ImmediateRecommendationCard
+                    mode={setupMode}
+                    recommendation={
+                      immediateRecommendation
+                    }
+                    pendingWakeStyleId={
+                      pendingWakeStyles[setupMode]
+                    }
+                    onTryRecommendation={
+                      handleTryRecommendation
+                    }
+                    onKeepCurrent={
+                      handleKeepCurrent
+                    }
+                    onCancelPending={() =>
+                      handleCancelPendingWakeStyle(
+                        setupMode
+                      )
+                    }
+                    onReviewSettings={() => {
+                      setImmediateRecommendation(null);
+                      setTab("settings");
+                    }}
                   />
 
                   {setupMode === "transit" ? (

@@ -43,7 +43,7 @@ export const WAKE_STYLES: WakeStyleOption[] = [
   {
     id: "standard",
     label: "しっかり",
-    description: "10秒ごとに強くなり、長押しで停止します",
+    description: "10秒ごとに強くなり、タップで停止します",
   },
   {
     id: "strong",

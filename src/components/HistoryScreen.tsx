@@ -41,29 +41,6 @@ function wakeStyleLabel(
   );
 }
 
-function formatElapsedMilliseconds(
-  milliseconds: number | null
-): string {
-  if (
-    milliseconds === null ||
-    !Number.isFinite(milliseconds) ||
-    milliseconds < 0
-  ) {
-    return "未計測";
-  }
-
-  const totalSeconds = milliseconds / 1000;
-
-  if (totalSeconds < 60) {
-    return `${totalSeconds.toFixed(1)}秒`;
-  }
-
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds - minutes * 60;
-
-  return `${minutes}分${seconds.toFixed(1)}秒`;
-}
-
 export function HistoryScreen() {
   const [rows, setRows] =
     useState<AlarmHistoryRow[] | null>(null);
@@ -345,39 +322,6 @@ function HistoryCard({
           />
         </div>
       )}
-
-      {row.status === "fired" &&
-        row.alarm_fired_at && (
-          <div className="mt-3 rounded-2xl border border-moon/20 bg-moon/8 px-3.5 py-3">
-            <p className="mb-2 text-xs font-extrabold text-moon">
-              アラーム反応時間
-            </p>
-            <div
-              className={`grid gap-3 text-[13px] ${
-                row.wake_style === "strong"
-                  ? "grid-cols-2"
-                  : "grid-cols-1"
-              }`}
-            >
-              <Meta
-                icon={<Clock size={14} />}
-                label="反応まで"
-                value={formatElapsedMilliseconds(
-                  row.reaction_ms
-                )}
-              />
-              {row.wake_style === "strong" && (
-                <Meta
-                  icon={<Clock size={14} />}
-                  label="停止完了まで"
-                  value={formatElapsedMilliseconds(
-                    row.stop_ms
-                  )}
-                />
-              )}
-            </div>
-          </div>
-        )}
 
       <p className="mt-3 text-right text-[11px] text-muted-foreground">
         {formatDateTime(

@@ -4,6 +4,7 @@ import { Bell, Moon, MapPin, Clock, ArrowRight, Plus, Music } from "lucide-react
 
 import { Button } from "@/src/components/ui/button";
 import { Card } from "@/src/components/ui/card";
+import { WeeklyReportCard } from "@/src/components/WeeklyReportCard";
 import type { Tab } from "@/src/lib/types";
 import type { StationRow } from "@/src/lib/stations";
 
@@ -102,6 +103,8 @@ export function HomeScreen({
         <Bell size={18} className="mr-2" />
         アラームを設定する
       </Button>
+
+      <WeeklyReportCard />
 
       {/* よく使う駅（履歴順） */}
       <div className="mb-3 mt-7 flex items-center justify-between">
