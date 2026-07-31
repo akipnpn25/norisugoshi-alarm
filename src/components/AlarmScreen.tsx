@@ -14,23 +14,32 @@ import { formatTimeWithDay } from "@/src/lib/time";
 
 interface AlarmScreenProps {
   config: AlarmConfig;
+  onFirstInteraction: () => void;
   onStop: () => void;
 }
 
-const HOLD_DURATION_MS = 1600;
-const SLIDE_COMPLETE_VALUE = 94;
+const SLIDE_THUMB_SIZE = 56;
+const SLIDE_TRACK_PADDING = 8;
+const SLIDE_COMPLETE_RATIO = 0.86;
 
 export function AlarmScreen({
   config,
+  onFirstInteraction,
   onStop,
 }: AlarmScreenProps) {
   const [pulse, setPulse] = useState(false);
-  const [holdProgress, setHoldProgress] = useState(0);
-  const [slideValue, setSlideValue] = useState(0);
-  const holdIntervalRef =
-    useRef<ReturnType<typeof setInterval> | null>(null);
-  const holdStartedAtRef = useRef<number | null>(null);
+  const [slideOffset, setSlideOffset] = useState(0);
+  const [slideMaxOffset, setSlideMaxOffset] = useState(0);
+  const [isSliding, setIsSliding] = useState(false);
+  const slideTrackRef = useRef<HTMLDivElement | null>(null);
+  const slideOffsetRef = useRef(0);
+  const slidePointerIdRef = useRef<number | null>(null);
+  const slideStartXRef = useRef(0);
+  const slideStartOffsetRef = useRef(0);
   const stoppingRef = useRef(false);
+  const interactionRecordedRef = useRef(
+    Boolean(config.firstInteractionAt)
+  );
   const isBreak = config.mode === "break";
 
   useEffect(() => {
@@ -42,78 +51,166 @@ export function AlarmScreen({
     return () => clearInterval(id);
   }, []);
 
-  const clearHold = () => {
-    if (holdIntervalRef.current) {
-      clearInterval(holdIntervalRef.current);
-      holdIntervalRef.current = null;
-    }
-
-    holdStartedAtRef.current = null;
-  };
-
   useEffect(() => {
-    return () => clearHold();
+    const track = slideTrackRef.current;
+
+    if (!track) return;
+
+    const updateMaxOffset = () => {
+      const nextMaxOffset = Math.max(
+        0,
+        track.clientWidth -
+          SLIDE_THUMB_SIZE -
+          SLIDE_TRACK_PADDING * 2
+      );
+
+      setSlideMaxOffset(nextMaxOffset);
+      slideOffsetRef.current = Math.min(
+        slideOffsetRef.current,
+        nextMaxOffset
+      );
+      setSlideOffset(slideOffsetRef.current);
+    };
+
+    updateMaxOffset();
+
+    const observer = new ResizeObserver(updateMaxOffset);
+    observer.observe(track);
+
+    return () => observer.disconnect();
   }, []);
+
+  const recordFirstInteraction = () => {
+    if (interactionRecordedRef.current) return;
+
+    interactionRecordedRef.current = true;
+    onFirstInteraction();
+  };
 
   const finishStop = () => {
     if (stoppingRef.current) return;
 
+    recordFirstInteraction();
     stoppingRef.current = true;
-    clearHold();
     onStop();
   };
 
-  const startHold = () => {
+  const updateSlideOffset = (value: number) => {
+    const nextValue = Math.min(
+      slideMaxOffset,
+      Math.max(0, value)
+    );
+
+    slideOffsetRef.current = nextValue;
+    setSlideOffset(nextValue);
+  };
+
+  const startSlide = (
+    event: React.PointerEvent<HTMLButtonElement>
+  ) => {
+    if (stoppingRef.current) return;
+
+    recordFirstInteraction();
+    slidePointerIdRef.current = event.pointerId;
+    slideStartXRef.current = event.clientX;
+    slideStartOffsetRef.current =
+      slideOffsetRef.current;
+    setIsSliding(true);
+    event.currentTarget.setPointerCapture(
+      event.pointerId
+    );
+  };
+
+  const moveSlide = (
+    event: React.PointerEvent<HTMLButtonElement>
+  ) => {
     if (
-      stoppingRef.current ||
-      holdIntervalRef.current
+      slidePointerIdRef.current !== event.pointerId ||
+      stoppingRef.current
     ) {
       return;
     }
 
-    holdStartedAtRef.current = performance.now();
-    setHoldProgress(0);
+    const nextOffset =
+      slideStartOffsetRef.current +
+      event.clientX -
+      slideStartXRef.current;
 
-    holdIntervalRef.current = setInterval(() => {
-      const startedAt = holdStartedAtRef.current;
+    updateSlideOffset(nextOffset);
 
-      if (startedAt === null) return;
-
-      const progress = Math.min(
-        1,
-        (performance.now() - startedAt) /
-          HOLD_DURATION_MS
-      );
-
-      setHoldProgress(progress);
-
-      if (progress >= 1) {
-        finishStop();
-      }
-    }, 40);
-  };
-
-  const cancelHold = () => {
-    if (stoppingRef.current) return;
-
-    clearHold();
-    setHoldProgress(0);
-  };
-
-  const handleSlide = (value: number) => {
-    setSlideValue(value);
-
-    if (value >= SLIDE_COMPLETE_VALUE) {
+    if (
+      slideMaxOffset > 0 &&
+      nextOffset >=
+        slideMaxOffset * SLIDE_COMPLETE_RATIO
+    ) {
+      updateSlideOffset(slideMaxOffset);
       finishStop();
     }
   };
 
-  const resetSlide = () => {
+  const finishSlide = (
+    event: React.PointerEvent<HTMLButtonElement>
+  ) => {
     if (
-      !stoppingRef.current &&
-      slideValue < SLIDE_COMPLETE_VALUE
+      slidePointerIdRef.current !== event.pointerId ||
+      stoppingRef.current
     ) {
-      setSlideValue(0);
+      return;
+    }
+
+    slidePointerIdRef.current = null;
+    setIsSliding(false);
+
+    if (
+      event.currentTarget.hasPointerCapture(
+        event.pointerId
+      )
+    ) {
+      event.currentTarget.releasePointerCapture(
+        event.pointerId
+      );
+    }
+
+    updateSlideOffset(0);
+  };
+
+  const handleSlideKeyDown = (
+    event: React.KeyboardEvent<HTMLButtonElement>
+  ) => {
+    if (
+      event.key === "Enter" ||
+      event.key === " "
+    ) {
+      event.preventDefault();
+      recordFirstInteraction();
+      finishStop();
+      return;
+    }
+
+    if (
+      event.key !== "ArrowRight" &&
+      event.key !== "ArrowLeft"
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    recordFirstInteraction();
+
+    const direction =
+      event.key === "ArrowRight" ? 1 : -1;
+    const nextOffset =
+      slideOffsetRef.current +
+      direction * Math.max(16, slideMaxOffset * 0.12);
+
+    updateSlideOffset(nextOffset);
+
+    if (
+      nextOffset >=
+      slideMaxOffset * SLIDE_COMPLETE_RATIO
+    ) {
+      updateSlideOffset(slideMaxOffset);
+      finishStop();
     }
   };
 
@@ -162,6 +259,7 @@ export function AlarmScreen({
       {config.wakeStyle.id === "gentle" && (
         <>
           <Button
+            onPointerDown={recordFirstInteraction}
             onClick={finishStop}
             size="lg"
             className="w-full animate-alarm-shake"
@@ -179,58 +277,82 @@ export function AlarmScreen({
 
       {config.wakeStyle.id === "standard" && (
         <>
-          <button
-            type="button"
-            onPointerDown={startHold}
-            onPointerUp={cancelHold}
-            onPointerCancel={cancelHold}
-            onPointerLeave={cancelHold}
-            className="relative w-full touch-none overflow-hidden rounded-2xl border border-moon bg-night-card px-6 py-5 text-lg font-extrabold text-moon active:scale-[0.99]"
+          <Button
+            onPointerDown={recordFirstInteraction}
+            onClick={finishStop}
+            size="lg"
+            className="w-full animate-alarm-shake"
           >
-            <span
-              aria-hidden="true"
-              className="absolute inset-y-0 left-0 bg-moon/20 transition-[width]"
-              style={{
-                width: `${holdProgress * 100}%`,
-              }}
-            />
-            <span className="relative flex items-center justify-center">
-              <Hand size={20} className="mr-2" />
-              長押しして停止
-            </span>
-          </button>
+            <Hand size={20} className="mr-2" />
+            {isBreak
+              ? "休憩を終える"
+              : "アラームを止める"}
+          </Button>
           <p className="mt-4 text-[13px] text-muted-foreground">
-            約1.5秒間、指を離さず押してください
+            タップするとアラームが止まります
           </p>
         </>
       )}
 
       {config.wakeStyle.id === "strong" && (
         <>
-          <div className="w-full rounded-2xl border border-moon/60 bg-night-card px-4 py-4">
-            <div className="mb-3 flex items-center justify-between text-sm font-extrabold text-moon">
-              <span>右までスライドして停止</span>
+          <div
+            ref={slideTrackRef}
+            className="relative h-[72px] w-full select-none overflow-hidden rounded-full border border-moon/55 bg-night-card/95 shadow-inner touch-none"
+          >
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 flex items-center justify-center gap-2 pl-16 pr-5 text-sm font-extrabold text-moon transition-opacity"
+              style={{
+                opacity:
+                  slideMaxOffset > 0
+                    ? Math.max(
+                        0.18,
+                        1 -
+                          slideOffset /
+                            slideMaxOffset
+                      )
+                    : 1,
+              }}
+            >
+              <span>右へスライドして停止</span>
               <ArrowRight size={18} />
             </div>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              step="1"
-              value={slideValue}
-              aria-label="右までスライドしてアラームを停止"
-              onChange={(event) =>
-                handleSlide(
-                  Number(event.target.value)
-                )
+
+            <button
+              type="button"
+              role="slider"
+              aria-label="右へスライドしてアラームを停止"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={
+                slideMaxOffset > 0
+                  ? Math.round(
+                      (slideOffset /
+                        slideMaxOffset) *
+                        100
+                    )
+                  : 0
               }
-              onPointerUp={resetSlide}
-              onPointerCancel={resetSlide}
-              className="h-11 w-full cursor-pointer accent-moon"
-            />
+              onPointerDown={startSlide}
+              onPointerMove={moveSlide}
+              onPointerUp={finishSlide}
+              onPointerCancel={finishSlide}
+              onKeyDown={handleSlideKeyDown}
+              className="absolute left-2 top-2 flex h-14 w-14 touch-none items-center justify-center rounded-full bg-moon text-night-deep shadow-lg outline-none ring-offset-2 ring-offset-night-card transition-shadow focus-visible:ring-2 focus-visible:ring-moon active:shadow-md"
+              style={{
+                transform: `translateX(${slideOffset}px)`,
+                transition: isSliding
+                  ? "none"
+                  : "transform 220ms ease-out",
+              }}
+            >
+              <ArrowRight size={27} strokeWidth={2.8} />
+            </button>
           </div>
+
           <p className="mt-4 text-center text-[13px] text-muted-foreground">
-            誤操作を防ぐため、最後まで動かすと停止します
+            丸いボタンをつかんで、右端近くまで動かしてください
           </p>
         </>
       )}

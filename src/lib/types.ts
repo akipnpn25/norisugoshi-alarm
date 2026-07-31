@@ -59,6 +59,8 @@ export interface AlarmConfig {
   breakStartedAt?: Date;
   breakDurationMinutes?: number;
   breakWarningEnabled?: boolean;
+  alarmFiredAt?: Date;
+  firstInteractionAt?: Date;
 }
 
 export interface AlarmInput {
@@ -130,6 +132,11 @@ export interface AlarmHistoryRow {
   duration_minutes: number | null;
   warning_minutes_before: number | null;
   started_at: string | null;
+  alarm_fired_at: string | null;
+  first_interaction_at: string | null;
+  stopped_at: string | null;
+  reaction_ms: number | null;
+  stop_ms: number | null;
   status: string;
   created_at: string;
 }

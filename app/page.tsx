@@ -112,6 +112,14 @@ function getBreakDurationOption(
 }
 
 
+interface AlarmTimingResult {
+  alarmFiredAt: Date;
+  firstInteractionAt: Date | null;
+  stoppedAt: Date;
+  reactionMs: number | null;
+  stopMs: number;
+}
+
 function getSafeLeadTimeId(value: string): LeadTimeId {
   return LEAD_TIMES.some((item) => item.id === value)
     ? (value as LeadTimeId)
@@ -215,7 +223,8 @@ async function createAlarmHistory(
 
 async function updateAlarmHistoryStatus(
   historyId: string,
-  status: "fired" | "cancelled"
+  status: "fired" | "cancelled",
+  timing?: AlarmTimingResult
 ): Promise<void> {
   try {
     await ensureAnonymousSession();
@@ -224,9 +233,24 @@ async function updateAlarmHistoryStatus(
     return;
   }
 
+  const updates: Record<string, unknown> = {
+    status,
+  };
+
+  if (timing) {
+    updates.alarm_fired_at =
+      timing.alarmFiredAt.toISOString();
+    updates.first_interaction_at =
+      timing.firstInteractionAt?.toISOString() ?? null;
+    updates.stopped_at =
+      timing.stoppedAt.toISOString();
+    updates.reaction_ms = timing.reactionMs;
+    updates.stop_ms = timing.stopMs;
+  }
+
   const { error } = await supabase
     .from("alarm_history")
-    .update({ status })
+    .update(updates)
     .eq("id", historyId);
 
   if (error) {
@@ -284,6 +308,9 @@ export default function Home() {
   const historyIdRef = useRef<string | null>(null);
   const historyInsertRef =
     useRef<Promise<void> | null>(null);
+  const alarmFiredAtRef = useRef<Date | null>(null);
+  const firstInteractionAtRef =
+    useRef<Date | null>(null);
 
   const clearScheduleTimers = () => {
     if (timerRef.current) {
@@ -355,6 +382,26 @@ export default function Home() {
   }, [earphoneChecked]);
 
   const fireAlarm = (cfg: AlarmConfig) => {
+    const alarmFiredAt =
+      cfg.alarmFiredAt ?? new Date();
+    const activeConfig: AlarmConfig = {
+      ...cfg,
+      alarmFiredAt,
+      firstInteractionAt:
+        cfg.firstInteractionAt,
+    };
+
+    alarmFiredAtRef.current = alarmFiredAt;
+    firstInteractionAtRef.current =
+      cfg.firstInteractionAt ?? null;
+    setConfig(activeConfig);
+
+    const historyId = historyIdRef.current;
+
+    if (historyId) {
+      saveActiveAlarm(activeConfig, historyId);
+    }
+
     playAlarm(undefined, cfg.wakeStyle.id);
     setScreen("alarm");
   };
@@ -405,6 +452,10 @@ export default function Home() {
 
     historyIdRef.current = historyId;
     historyInsertRef.current = null;
+    alarmFiredAtRef.current =
+      restoredConfig.alarmFiredAt ?? null;
+    firstInteractionAtRef.current =
+      restoredConfig.firstInteractionAt ?? null;
     setSetupMode(
       restoredConfig.mode === "break"
         ? "break"
@@ -484,17 +535,19 @@ export default function Home() {
   const commitAlarm = (cfg: AlarmConfig) => {
     if (historyIdRef.current) return;
 
+    alarmFiredAtRef.current = null;
+    firstInteractionAtRef.current = null;
     setEarphoneConnected(cfg.earphoneConnected);
     setEarphoneChecked(true);
     setConfig(cfg);
     setScreen("rest");
-    scheduleAlarm(cfg);
 
     const historyId = crypto.randomUUID();
     historyIdRef.current = historyId;
     historyInsertRef.current =
       createAlarmHistory(cfg, historyId);
     saveActiveAlarm(cfg, historyId);
+    scheduleAlarm(cfg);
 
     if (cfg.mode === "transit") {
       void recordStationUse(cfg.station.id).then(
@@ -719,7 +772,8 @@ const handleToggleTodaySkip = (
   };
 
   const finishHistory = (
-    status: "fired" | "cancelled"
+    status: "fired" | "cancelled",
+    timing?: AlarmTimingResult
   ) => {
     const historyId = historyIdRef.current;
     const insertPromise = historyInsertRef.current;
@@ -733,28 +787,87 @@ const handleToggleTodaySkip = (
         if (insertPromise) await insertPromise;
         await updateAlarmHistoryStatus(
           historyId,
-          status
+          status,
+          timing
         );
       })();
     }
+  };
+
+  const handleFirstInteraction = () => {
+    if (firstInteractionAtRef.current) return;
+
+    const firstInteractionAt = new Date();
+    firstInteractionAtRef.current = firstInteractionAt;
+
+    setConfig((current) => {
+      if (!current) return current;
+
+      const nextConfig: AlarmConfig = {
+        ...current,
+        firstInteractionAt,
+      };
+      const historyId = historyIdRef.current;
+
+      if (historyId) {
+        saveActiveAlarm(nextConfig, historyId);
+      }
+
+      return nextConfig;
+    });
   };
 
   const handleCancel = () => {
     clearScheduleTimers();
     stopAlarm();
     finishHistory("cancelled");
+    alarmFiredAtRef.current = null;
+    firstInteractionAtRef.current = null;
     setConfig(null);
     setScreen("rest");
     setTab("alarm");
   };
 
   const handleStop = () => {
+    const stoppedAt = new Date();
+    const alarmFiredAt = alarmFiredAtRef.current;
+    const firstInteractionAt =
+      firstInteractionAtRef.current;
+
     clearScheduleTimers();
     stopAlarm();
-    finishHistory("fired");
+
+    const timing = alarmFiredAt
+      ? {
+          alarmFiredAt,
+          firstInteractionAt,
+          stoppedAt,
+          reactionMs: firstInteractionAt
+            ? Math.max(
+                0,
+                Math.round(
+                  firstInteractionAt.getTime() -
+                    alarmFiredAt.getTime()
+                )
+              )
+            : null,
+          stopMs: Math.max(
+            0,
+            Math.round(
+              stoppedAt.getTime() -
+                alarmFiredAt.getTime()
+            )
+          ),
+        }
+      : undefined;
+
+    finishHistory("fired", timing);
+    alarmFiredAtRef.current = null;
+    firstInteractionAtRef.current = null;
     setConfig(null);
     setScreen("rest");
-    setTab("home");
+    setShowSchedules(false);
+    setTab("alarm");
   };
 
   const handleTabChange = (next: Tab) => {
@@ -845,6 +958,9 @@ const handleToggleTodaySkip = (
         {screen === "alarm" && config ? (
           <AlarmScreen
             config={config}
+            onFirstInteraction={
+              handleFirstInteraction
+            }
             onStop={handleStop}
           />
         ) : (
@@ -1036,4 +1152,3 @@ function NoActiveAlarm({
     </div>
   );
 }
-

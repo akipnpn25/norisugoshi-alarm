@@ -16,6 +16,8 @@ export interface StoredActiveAlarm {
   breakStartedAt?: string;
   breakDurationMinutes?: number;
   breakWarningEnabled?: boolean;
+  alarmFiredAt?: string;
+  firstInteractionAt?: string;
   historyId: string;
 }
 
@@ -37,6 +39,9 @@ export function saveActiveAlarm(
     breakStartedAt: config.breakStartedAt?.toISOString(),
     breakDurationMinutes: config.breakDurationMinutes,
     breakWarningEnabled: config.breakWarningEnabled,
+    alarmFiredAt: config.alarmFiredAt?.toISOString(),
+    firstInteractionAt:
+      config.firstInteractionAt?.toISOString(),
     historyId,
   };
 
@@ -82,6 +87,13 @@ export function loadActiveAlarm(): {
     const breakStartedAt = stored.breakStartedAt
       ? new Date(stored.breakStartedAt)
       : undefined;
+    const alarmFiredAt = stored.alarmFiredAt
+      ? new Date(stored.alarmFiredAt)
+      : undefined;
+    const firstInteractionAt =
+      stored.firstInteractionAt
+        ? new Date(stored.firstInteractionAt)
+        : undefined;
 
     const invalidBase =
       !stored.station ||
@@ -97,8 +109,13 @@ export function loadActiveAlarm(): {
         Number.isNaN(breakStartedAt.getTime()) ||
         !Number.isInteger(stored.breakDurationMinutes) ||
         (stored.breakDurationMinutes ?? 0) < 1);
+    const invalidTiming =
+      (alarmFiredAt &&
+        Number.isNaN(alarmFiredAt.getTime())) ||
+      (firstInteractionAt &&
+        Number.isNaN(firstInteractionAt.getTime()));
 
-    if (invalidBase || invalidBreak) {
+    if (invalidBase || invalidBreak || invalidTiming) {
       clearActiveAlarm();
       return null;
     }
@@ -122,6 +139,8 @@ export function loadActiveAlarm(): {
         breakStartedAt,
         breakDurationMinutes: stored.breakDurationMinutes,
         breakWarningEnabled: Boolean(stored.breakWarningEnabled),
+        alarmFiredAt,
+        firstInteractionAt,
       },
       historyId: stored.historyId,
     };
