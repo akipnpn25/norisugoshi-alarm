@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { Moon, MapPin, Clock, Bell, Plus, Search, X } from "lucide-react";
 
 import { Button } from "@/src/components/ui/button";
@@ -276,13 +277,13 @@ function StationAddModal({
   onClose: () => void;
   onAdd: () => void;
 }) {
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-night-deep/70 px-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto overscroll-contain bg-night-deep/80 px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-[calc(env(safe-area-inset-top)+1.25rem)] backdrop-blur-md animate-fade-in"
       onClick={onClose}
     >
       <div
-        className="max-h-[calc(100dvh-env(safe-area-inset-top)-1.5rem)] w-full max-w-md overflow-y-auto rounded-3xl border border-moon/30 bg-night-card p-6 shadow-2xl animate-scale-in"
+        className="max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2.5rem)] w-full max-w-md overflow-y-auto rounded-3xl border border-moon/30 bg-night-card p-5 shadow-2xl animate-scale-in sm:p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
@@ -322,6 +323,7 @@ function StationAddModal({
           追加する
         </button>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
