@@ -193,6 +193,14 @@ export function SetupScreen({
         onCheckEnd={onHeadphoneCheckEnd}
       />
 
+      <Card className="mt-3 border-moon/30 bg-moon/10 px-4 py-3">
+        <p className="text-[13px] leading-relaxed text-muted-foreground">
+          このWeb版は、端末をロックしたり別のアプリへ移動したりすると、
+          予定時刻に鳴らない場合があります。利用中はこの画面を
+          開いたままにしてください。
+        </p>
+      </Card>
+
       {/* 5. 計算された起床時刻（概要） */}
       <SectionLabel num="5" text="起床時刻" />
       <Card className="bg-card">
