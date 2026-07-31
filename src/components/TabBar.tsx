@@ -19,7 +19,10 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 
 export function TabBar({ active, onChange, hasActiveAlarm }: TabBarProps) {
   return (
-    <nav className="z-40 shrink-0 border-t border-border bg-night-deep/95 backdrop-blur-md">
+    <nav
+      className="z-40 shrink-0 border-t border-border bg-night-deep/95 px-1 pt-1 backdrop-blur-md"
+      style={{ paddingBottom: "max(env(safe-area-inset-bottom), 10px)" }}
+    >
       <div className="flex">
         {TABS.map((tab) => {
           const isActive = active === tab.id;
@@ -29,7 +32,7 @@ export function TabBar({ active, onChange, hasActiveAlarm }: TabBarProps) {
               key={tab.id}
               onClick={() => !isDisabled && onChange(tab.id)}
               disabled={isDisabled}
-              className={`flex flex-1 flex-col items-center gap-1 py-2.5 transition-colors ${
+              className={`flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl py-1.5 transition-colors ${
                 isActive
                   ? "text-moon"
                   : isDisabled

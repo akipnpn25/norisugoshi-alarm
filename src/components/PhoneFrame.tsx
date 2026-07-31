@@ -21,7 +21,7 @@ export function PhoneFrame({
     <div className="lg:flex lg:min-h-screen lg:items-center lg:justify-center lg:bg-gradient-to-b lg:from-slate-300 lg:to-slate-500 lg:p-6">
       <div className="lg:relative lg:w-[410px] lg:h-[min(860px,88vh)] lg:rounded-[3.5rem] lg:p-[3px] lg:bg-gradient-to-b lg:from-gray-800 lg:to-gray-900 lg:border lg:border-gray-600/40 lg:shadow-[0_30px_70px_-20px_rgba(0,0,0,0.45)]">
         <div
-          className={`relative flex h-screen flex-col overflow-hidden lg:h-full lg:rounded-[3.3rem] phone-frame-screen ${
+          className={`relative flex h-[100dvh] flex-col overflow-hidden lg:h-full lg:rounded-[3.3rem] phone-frame-screen ${
             theme === "day" ? "theme-day" : ""
           }`}
         >
@@ -58,15 +58,13 @@ export function PhoneFrame({
             style={{ animation: "cloud-drift 45s linear infinite" }}
           />
 
-          {/* モバイルではiPhoneのステータスバーと重ならないよう、
-              セーフエリアだけ確保して接続状態バッジは非表示にする。
-              PCのスマホプレビューでは従来どおり表示する。 */}
-          <div className="z-40 shrink-0">
-            <div className="h-[env(safe-area-inset-top)] bg-night/60 md:hidden" />
+          {/* iPhoneのステータスバー領域を避け、その直下に出力先を表示する */}
+          <div className="z-40 shrink-0 bg-night/60 backdrop-blur-md">
+            <div className="h-[env(safe-area-inset-top)] md:hidden" />
 
-            <div className="hidden items-center justify-end bg-night/60 px-4 pb-2 pt-3.5 backdrop-blur-md md:flex">
+            <div className="flex items-center justify-end px-4 pb-2 pt-2 md:pt-3.5">
               <div
-                className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-[13px] font-bold backdrop-blur-sm transition-colors ${
+                className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold backdrop-blur-sm transition-colors md:gap-2 md:px-3 md:py-1.5 md:text-[13px] ${
                   !earphoneChecked
                     ? "bg-white/5 text-muted-foreground"
                     : earphoneConnected
@@ -74,7 +72,7 @@ export function PhoneFrame({
                       : "bg-moon/15 text-moon"
                 }`}
               >
-                <Headphones size={18} />
+                <Headphones size={16} />
                 {!earphoneChecked
                   ? "未確認"
                   : earphoneConnected
