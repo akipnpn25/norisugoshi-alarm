@@ -2,30 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { HomeScreen } from "@/src/components/HomeScreen";
-import { SetupScreen } from "@/src/components/SetupScreen";
-import { RestScreen } from "@/src/components/RestScreen";
 import { AlarmScreen } from "@/src/components/AlarmScreen";
+import { BreakSetupScreen } from "@/src/components/BreakSetupScreen";
 import { HistoryScreen } from "@/src/components/HistoryScreen";
-import { SettingsScreen } from "@/src/components/SettingsScreen";
-import { TabBar } from "@/src/components/TabBar";
+import { HomeScreen } from "@/src/components/HomeScreen";
 import { PhoneFrame } from "@/src/components/PhoneFrame";
-import {
-  DEFAULT_LEAD_TIME_ID,
-  DEFAULT_WAKE_STYLE_ID,
-  LEAD_TIMES,
-  WAKE_STYLES,
-} from "@/src/lib/data";
-import type {
-  AlarmConfig,
-  AlarmInput,
-  Screen,
-  Station,
-  Tab,
-  Theme,
-  WakeStyleId,
-} from "@/src/lib/types";
-import { supabase } from "@/src/lib/supabase";
+import { RestScreen } from "@/src/components/RestScreen";
+import { SettingsScreen } from "@/src/components/SettingsScreen";
+import { SetupModeSwitch } from "@/src/components/SetupModeSwitch";
+import { SetupScreen } from "@/src/components/SetupScreen";
+import { TabBar } from "@/src/components/TabBar";
 import { ensureAnonymousSession } from "@/src/lib/auth";
 import {
   clearActiveAlarm,
@@ -33,24 +19,47 @@ import {
   saveActiveAlarm,
 } from "@/src/lib/alarm-storage";
 import {
-  addStation,
-  fetchStations,
-  recordStationUse,
-  type StationRow,
-} from "@/src/lib/stations";
+  BREAK_DURATION_OPTIONS,
+  BREAK_END_LEAD_TIME,
+  BREAK_STATION,
+  DEFAULT_LEAD_TIME_ID,
+  DEFAULT_WAKE_STYLE_ID,
+  LEAD_TIMES,
+  WAKE_STYLES,
+} from "@/src/lib/data";
 import { onAudioDeviceChange } from "@/src/lib/headphone";
 import {
   ALARM_SOUNDS,
   getStoredAlarmSound,
   loadAlarmSound,
   playAlarm,
+  playBreakWarning,
   previewSound,
   releaseAlarmSound,
   stopAlarm,
   storeAlarmSound,
   type AlarmSoundId,
 } from "@/src/lib/sound";
+import {
+  addStation,
+  fetchStations,
+  recordStationUse,
+  type StationRow,
+} from "@/src/lib/stations";
+import { supabase } from "@/src/lib/supabase";
 import { calculateAlarmTime } from "@/src/lib/time";
+import type {
+  AlarmConfig,
+  AlarmInput,
+  BreakDurationOption,
+  BreakInput,
+  Screen,
+  SetupMode,
+  Station,
+  Tab,
+  Theme,
+  WakeStyleId,
+} from "@/src/lib/types";
 import {
   getStoredWakeStyle,
   storeWakeStyle,
@@ -61,6 +70,33 @@ function getDefaultArrival(): Date {
   d.setMinutes(d.getMinutes() + 30);
   d.setSeconds(0, 0);
   return d;
+}
+
+function getBreakDurationMinutes(input: BreakInput): number | null {
+  const minutes =
+    input.durationOption === "custom"
+      ? Number.parseInt(input.customMinutes, 10)
+      : input.durationOption;
+
+  if (
+    !Number.isInteger(minutes) ||
+    minutes < 1 ||
+    minutes > 240
+  ) {
+    return null;
+  }
+
+  return minutes;
+}
+
+function getBreakDurationOption(
+  minutes: number
+): BreakDurationOption {
+  const preset = BREAK_DURATION_OPTIONS.find(
+    (option) => option === minutes
+  );
+
+  return preset ?? "custom";
 }
 
 async function createAlarmHistory(
@@ -84,6 +120,19 @@ async function createAlarmHistory(
     demo_mode: cfg.demoMode.id,
     earphone_connected: cfg.earphoneConnected,
     wake_style: cfg.wakeStyle.id,
+    mode: cfg.mode,
+    duration_minutes:
+      cfg.mode === "break"
+        ? cfg.breakDurationMinutes ?? null
+        : null,
+    warning_minutes_before:
+      cfg.mode === "break" && cfg.breakWarningEnabled
+        ? 5
+        : null,
+    started_at:
+      cfg.mode === "break"
+        ? cfg.breakStartedAt?.toISOString() ?? null
+        : null,
     status: "set",
   });
 
@@ -117,8 +166,9 @@ export default function Home() {
   const [tab, setTab] = useState<Tab>("alarm");
   const [theme, setTheme] = useState<Theme>("night");
   const [config, setConfig] = useState<AlarmConfig | null>(null);
-  // screen: "rest" = 実行中タブの中身, "alarm" = 鳴動画面
   const [screen, setScreen] = useState<Screen>("rest");
+  const [setupMode, setSetupMode] =
+    useState<SetupMode>("transit");
 
   const [input, setInput] = useState<AlarmInput>({
     station: null,
@@ -127,15 +177,41 @@ export default function Home() {
     wakeStyleId: DEFAULT_WAKE_STYLE_ID,
   });
 
-  const [alarmSoundId, setAlarmSoundId] = useState<AlarmSoundId>("radial");
-  const [earphoneConnected, setEarphoneConnected] = useState(false);
-  const [earphoneChecked, setEarphoneChecked] = useState(false);
+  const [breakInput, setBreakInput] = useState<BreakInput>({
+    durationOption: 15,
+    customMinutes: "25",
+    warningEnabled: true,
+    wakeStyleId: DEFAULT_WAKE_STYLE_ID,
+  });
+
+  const [alarmSoundId, setAlarmSoundId] =
+    useState<AlarmSoundId>("radial");
+  const [earphoneConnected, setEarphoneConnected] =
+    useState(false);
+  const [earphoneChecked, setEarphoneChecked] =
+    useState(false);
   const [routeName, setRouteName] = useState("");
   const [stations, setStations] = useState<StationRow[]>([]);
 
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timerRef =
+    useRef<ReturnType<typeof setTimeout> | null>(null);
+  const warningTimerRef =
+    useRef<ReturnType<typeof setTimeout> | null>(null);
   const historyIdRef = useRef<string | null>(null);
-  const historyInsertRef = useRef<Promise<void> | null>(null);
+  const historyInsertRef =
+    useRef<Promise<void> | null>(null);
+
+  const clearScheduleTimers = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+
+    if (warningTimerRef.current) {
+      clearTimeout(warningTimerRef.current);
+      warningTimerRef.current = null;
+    }
+  };
 
   useEffect(() => {
     setAlarmSoundId(getStoredAlarmSound());
@@ -143,11 +219,23 @@ export default function Home() {
       ...prev,
       wakeStyleId: getStoredWakeStyle("transit"),
     }));
+    setBreakInput((prev) => ({
+      ...prev,
+      wakeStyleId: getStoredWakeStyle("break"),
+    }));
     loadAlarmSound();
-    refreshStations();
+    void refreshStations();
+
     return () => {
       releaseAlarmSound();
-      if (timerRef.current) clearTimeout(timerRef.current);
+
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+
+      if (warningTimerRef.current) {
+        clearTimeout(warningTimerRef.current);
+      }
     };
   }, []);
 
@@ -156,16 +244,18 @@ export default function Home() {
     setStations(rows);
   };
 
-  // イヤホンの抜き差しをリアルタイム監視。一度でも確認済みなら状態を自動更新。
   useEffect(() => {
     const unsubscribe = onAudioDeviceChange((route) => {
       setEarphoneConnected((prevConnected) => {
         if (!earphoneChecked) return prevConnected;
-        if (route.connected === prevConnected) return prevConnected;
+        if (route.connected === prevConnected) {
+          return prevConnected;
+        }
         if (route.connected) setRouteName(route.name);
         return route.connected;
       });
     });
+
     return unsubscribe;
   }, [earphoneChecked]);
 
@@ -175,13 +265,37 @@ export default function Home() {
   };
 
   const scheduleAlarm = (cfg: AlarmConfig) => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    const delay = cfg.alarmTime.getTime() - Date.now();
+    clearScheduleTimers();
+
+    const now = Date.now();
+
+    if (
+      cfg.mode === "break" &&
+      cfg.breakWarningEnabled
+    ) {
+      const warningAt =
+        cfg.alarmTime.getTime() - 5 * 60 * 1000;
+      const warningDelay = warningAt - now;
+
+      if (warningDelay > 0) {
+        warningTimerRef.current = setTimeout(() => {
+          warningTimerRef.current = null;
+          playBreakWarning();
+        }, warningDelay);
+      }
+    }
+
+    const delay = cfg.alarmTime.getTime() - now;
+
     if (delay <= 0) {
       fireAlarm(cfg);
       return;
     }
-    timerRef.current = setTimeout(() => fireAlarm(cfg), delay);
+
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null;
+      fireAlarm(cfg);
+    }, delay);
   };
 
   useEffect(() => {
@@ -196,13 +310,32 @@ export default function Home() {
 
     historyIdRef.current = historyId;
     historyInsertRef.current = null;
+    setSetupMode(
+      restoredConfig.mode === "break"
+        ? "break"
+        : "transit"
+    );
 
-    setInput({
-      station: restoredConfig.station,
-      arrivalTime: restoredConfig.arrivalTime,
-      leadTimeId: restoredConfig.leadTime.id,
-      wakeStyleId: restoredConfig.wakeStyle.id,
-    });
+    if (restoredConfig.mode === "break") {
+      const duration =
+        restoredConfig.breakDurationMinutes ?? 15;
+
+      setBreakInput({
+        durationOption: getBreakDurationOption(duration),
+        customMinutes: String(duration),
+        warningEnabled: Boolean(
+          restoredConfig.breakWarningEnabled
+        ),
+        wakeStyleId: restoredConfig.wakeStyle.id,
+      });
+    } else {
+      setInput({
+        station: restoredConfig.station,
+        arrivalTime: restoredConfig.arrivalTime,
+        leadTimeId: restoredConfig.leadTime.id,
+        wakeStyleId: restoredConfig.wakeStyle.id,
+      });
+    }
 
     setEarphoneConnected(
       restoredConfig.earphoneConnected
@@ -214,13 +347,33 @@ export default function Home() {
     setTab("active");
   }, []);
 
-  const handleInputChange = (patch: Partial<AlarmInput>) => {
+  const handleInputChange = (
+    patch: Partial<AlarmInput>
+  ) => {
     setInput((prev) => ({ ...prev, ...patch }));
   };
 
-  const handleWakeStyleChange = (wakeStyleId: WakeStyleId) => {
+  const handleBreakInputChange = (
+    patch: Partial<BreakInput>
+  ) => {
+    setBreakInput((prev) => ({ ...prev, ...patch }));
+  };
+
+  const handleWakeStyleChange = (
+    wakeStyleId: WakeStyleId
+  ) => {
     setInput((prev) => ({ ...prev, wakeStyleId }));
     storeWakeStyle("transit", wakeStyleId);
+  };
+
+  const handleBreakWakeStyleChange = (
+    wakeStyleId: WakeStyleId
+  ) => {
+    setBreakInput((prev) => ({
+      ...prev,
+      wakeStyleId,
+    }));
+    storeWakeStyle("break", wakeStyleId);
   };
 
   const handleHeadphoneCheckEnd = (
@@ -234,7 +387,6 @@ export default function Home() {
   };
 
   const commitAlarm = (cfg: AlarmConfig) => {
-    // 連続クリックなどによる二重設定を防ぐ
     if (historyIdRef.current) return;
 
     setEarphoneConnected(cfg.earphoneConnected);
@@ -242,22 +394,38 @@ export default function Home() {
     setConfig(cfg);
     setScreen("rest");
     scheduleAlarm(cfg);
-      const historyId = crypto.randomUUID();
-      historyIdRef.current = historyId;
-      historyInsertRef.current = createAlarmHistory(cfg, historyId);
-      saveActiveAlarm(cfg, historyId);
-    recordStationUse(cfg.station.id).then(refreshStations);
+
+    const historyId = crypto.randomUUID();
+    historyIdRef.current = historyId;
+    historyInsertRef.current =
+      createAlarmHistory(cfg, historyId);
+    saveActiveAlarm(cfg, historyId);
+
+    if (cfg.mode === "transit") {
+      void recordStationUse(cfg.station.id).then(
+        refreshStations
+      );
+    }
+
     setTab("active");
   };
 
   const handleSetRealAlarm = () => {
     if (!input.station) return;
+
     const leadTime =
-      LEAD_TIMES.find((l) => l.id === input.leadTimeId) ?? LEAD_TIMES[1];
-    const alarmTime = calculateAlarmTime(input.arrivalTime, leadTime);
+      LEAD_TIMES.find(
+        (item) => item.id === input.leadTimeId
+      ) ?? LEAD_TIMES[1];
+    const alarmTime = calculateAlarmTime(
+      input.arrivalTime,
+      leadTime
+    );
     const wakeStyle =
-      WAKE_STYLES.find((style) => style.id === input.wakeStyleId) ??
-      WAKE_STYLES[1];
+      WAKE_STYLES.find(
+        (style) => style.id === input.wakeStyleId
+      ) ?? WAKE_STYLES[1];
+
     const cfg: AlarmConfig = {
       mode: "transit",
       station: input.station,
@@ -265,55 +433,92 @@ export default function Home() {
       leadTime,
       wakeStyle,
       alarmTime,
-      demoMode: { id: "normal", label: "通常", offsetSeconds: null },
+      demoMode: {
+        id: "normal",
+        label: "通常",
+        offsetSeconds: null,
+      },
       earphoneConnected,
     };
+
     commitAlarm(cfg);
   };
 
-  const handleCancel = () => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
+  const handleSetBreak = () => {
+    const durationMinutes =
+      getBreakDurationMinutes(breakInput);
+
+    if (durationMinutes === null) return;
+
+    const breakStartedAt = new Date();
+    const alarmTime = new Date(
+      breakStartedAt.getTime() +
+        durationMinutes * 60 * 1000
+    );
+    const wakeStyle =
+      WAKE_STYLES.find(
+        (style) => style.id === breakInput.wakeStyleId
+      ) ?? WAKE_STYLES[1];
+
+    const cfg: AlarmConfig = {
+      mode: "break",
+      station: BREAK_STATION,
+      arrivalTime: alarmTime,
+      leadTime: BREAK_END_LEAD_TIME,
+      wakeStyle,
+      alarmTime,
+      demoMode: {
+        id: "normal",
+        label: "通常",
+        offsetSeconds: null,
+      },
+      earphoneConnected,
+      breakStartedAt,
+      breakDurationMinutes: durationMinutes,
+      breakWarningEnabled:
+        breakInput.warningEnabled &&
+        durationMinutes > 5,
+    };
+
+    commitAlarm(cfg);
+  };
+
+  const finishHistory = (
+    status: "fired" | "cancelled"
+  ) => {
+    const historyId = historyIdRef.current;
+    const insertPromise = historyInsertRef.current;
+
+    historyIdRef.current = null;
+    historyInsertRef.current = null;
+    clearActiveAlarm();
+
+    if (historyId) {
+      void (async () => {
+        if (insertPromise) await insertPromise;
+        await updateAlarmHistoryStatus(
+          historyId,
+          status
+        );
+      })();
     }
+  };
+
+  const handleCancel = () => {
+    clearScheduleTimers();
     stopAlarm();
-      const historyId = historyIdRef.current;
-      const insertPromise = historyInsertRef.current;
-
-      historyIdRef.current = null;
-      historyInsertRef.current = null;
-      clearActiveAlarm();
-
-      if (historyId) {
-        void (async () => {
-          if (insertPromise) await insertPromise;
-          await updateAlarmHistoryStatus(historyId, "cancelled");
-        })();
-      }
+    finishHistory("cancelled");
     setConfig(null);
+    setScreen("rest");
     setTab("alarm");
   };
 
   const handleStop = () => {
+    clearScheduleTimers();
     stopAlarm();
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-      const historyId = historyIdRef.current;
-      const insertPromise = historyInsertRef.current;
-
-      historyIdRef.current = null;
-      historyInsertRef.current = null;
-      clearActiveAlarm();
-
-      if (historyId) {
-        void (async () => {
-          if (insertPromise) await insertPromise;
-          await updateAlarmHistoryStatus(historyId, "fired");
-        })();
-      }
+    finishHistory("fired");
     setConfig(null);
+    setScreen("rest");
     setTab("home");
   };
 
@@ -322,37 +527,64 @@ export default function Home() {
     setTab(next);
   };
 
-  const toggleTheme = () => setTheme((t) => (t === "night" ? "day" : "night"));
+  const toggleTheme = () =>
+    setTheme((current) =>
+      current === "night" ? "day" : "night"
+    );
 
-  const handleSelectAlarmSound = (id: AlarmSoundId) => {
+  const handleSelectAlarmSound = (
+    id: AlarmSoundId
+  ) => {
     setAlarmSoundId(id);
     storeAlarmSound(id);
     previewSound(id);
   };
 
   const alarmSoundLabel =
-    ALARM_SOUNDS.find((s) => s.id === alarmSoundId)?.label ?? "ラジアル";
+    ALARM_SOUNDS.find(
+      (sound) => sound.id === alarmSoundId
+    )?.label ?? "ラジアル";
 
   const handleSelectStation = (id: string) => {
-    const s = stations.find((x) => x.id === id);
-    if (s) {
-      setInput((prev) => ({ ...prev, station: s }));
-      recordStationUse(id).then(refreshStations);
+    const station = stations.find(
+      (item) => item.id === id
+    );
+
+    if (station) {
+      setSetupMode("transit");
+      setInput((prev) => ({
+        ...prev,
+        station,
+      }));
+      void recordStationUse(id).then(
+        refreshStations
+      );
       setTab("alarm");
     }
   };
 
   const handleAddStation = async (name: string) => {
     const row = await addStation(name);
+
     if (row) {
       await refreshStations();
-      setInput((prev) => ({ ...prev, station: row }));
+      setInput((prev) => ({
+        ...prev,
+        station: row,
+      }));
     }
   };
 
-  const handleSelectStationRow = (s: Station) => {
-    setInput((prev) => ({ ...prev, station: s }));
-    recordStationUse(s.id).then(refreshStations);
+  const handleSelectStationRow = (
+    station: Station
+  ) => {
+    setInput((prev) => ({
+      ...prev,
+      station,
+    }));
+    void recordStationUse(station.id).then(
+      refreshStations
+    );
   };
 
   const showTabBar = screen !== "alarm";
@@ -374,7 +606,10 @@ export default function Home() {
     >
       <main className="min-h-full">
         {screen === "alarm" && config ? (
-          <AlarmScreen config={config} onStop={handleStop} />
+          <AlarmScreen
+            config={config}
+            onStop={handleStop}
+          />
         ) : (
           <>
             {tab === "home" && (
@@ -384,42 +619,99 @@ export default function Home() {
                 stations={stations}
                 alarmSoundLabel={alarmSoundLabel}
                 onGoToAlarm={() => setTab("alarm")}
-                onGoToSettings={() => setTab("settings")}
+                onGoToSettings={() =>
+                  setTab("settings")
+                }
                 onSelectStation={handleSelectStation}
               />
             )}
+
             {tab === "alarm" && (
-              <SetupScreen
-                input={input}
-                onInputChange={handleInputChange}
-                onWakeStyleChange={handleWakeStyleChange}
-                earphoneChecked={earphoneChecked}
-                earphoneConnected={earphoneConnected}
-                routeName={routeName}
-                stations={stations}
-                onSetAlarm={handleSetRealAlarm}
-                onHeadphoneCheckEnd={handleHeadphoneCheckEnd}
-                onSelectStation={handleSelectStationRow}
-                onAddStation={handleAddStation}
-              />
+              <>
+                <SetupModeSwitch
+                  mode={setupMode}
+                  onChange={setSetupMode}
+                />
+
+                {setupMode === "transit" ? (
+                  <SetupScreen
+                    input={input}
+                    onInputChange={handleInputChange}
+                    onWakeStyleChange={
+                      handleWakeStyleChange
+                    }
+                    earphoneChecked={earphoneChecked}
+                    earphoneConnected={
+                      earphoneConnected
+                    }
+                    routeName={routeName}
+                    stations={stations}
+                    onSetAlarm={handleSetRealAlarm}
+                    onHeadphoneCheckEnd={
+                      handleHeadphoneCheckEnd
+                    }
+                    onSelectStation={
+                      handleSelectStationRow
+                    }
+                    onAddStation={handleAddStation}
+                  />
+                ) : (
+                  <BreakSetupScreen
+                    input={breakInput}
+                    onInputChange={
+                      handleBreakInputChange
+                    }
+                    onWakeStyleChange={
+                      handleBreakWakeStyleChange
+                    }
+                    earphoneChecked={earphoneChecked}
+                    earphoneConnected={
+                      earphoneConnected
+                    }
+                    routeName={routeName}
+                    onSetBreak={handleSetBreak}
+                    onHeadphoneCheckEnd={
+                      handleHeadphoneCheckEnd
+                    }
+                  />
+                )}
+              </>
             )}
+
             {tab === "active" &&
               (config ? (
-                <RestScreen config={config} onCancel={handleCancel} />
+                <RestScreen
+                  config={config}
+                  onCancel={handleCancel}
+                />
               ) : (
-                <NoActiveAlarm onGoToAlarm={() => setTab("alarm")} />
+                <NoActiveAlarm
+                  onGoToAlarm={() =>
+                    setTab("alarm")
+                  }
+                />
               ))}
-            {tab === "history" && <HistoryScreen />}
+
+            {tab === "history" && (
+              <HistoryScreen />
+            )}
+
             {tab === "settings" && (
               <SettingsScreen
                 theme={theme}
                 onToggleTheme={toggleTheme}
                 earphoneChecked={earphoneChecked}
-                earphoneConnected={earphoneConnected}
+                earphoneConnected={
+                  earphoneConnected
+                }
                 routeName={routeName}
-                onHeadphoneCheckEnd={handleHeadphoneCheckEnd}
+                onHeadphoneCheckEnd={
+                  handleHeadphoneCheckEnd
+                }
                 alarmSoundId={alarmSoundId}
-                onSelectAlarmSound={handleSelectAlarmSound}
+                onSelectAlarmSound={
+                  handleSelectAlarmSound
+                }
               />
             )}
           </>
@@ -429,7 +721,11 @@ export default function Home() {
   );
 }
 
-function NoActiveAlarm({ onGoToAlarm }: { onGoToAlarm: () => void }) {
+function NoActiveAlarm({
+  onGoToAlarm,
+}: {
+  onGoToAlarm: () => void;
+}) {
   return (
     <div className="mx-auto flex min-h-full max-w-md flex-col items-center justify-center px-6 py-16 text-center animate-fade-in">
       <p className="text-base text-muted-foreground">

@@ -359,6 +359,36 @@ export function stopAlarm(): void {
   }
 }
 
+export function playBreakWarning(): void {
+  if (typeof window === "undefined") return;
+
+  const ctx = getCtx();
+  const warningTones: Tone[] = [
+    {
+      freq: n(0),
+      start: 0,
+      dur: 0.35,
+      type: "sine",
+      gain: 0.14,
+    },
+    {
+      freq: n(5),
+      start: 0.28,
+      dur: 0.45,
+      type: "sine",
+      gain: 0.16,
+    },
+  ];
+
+  for (const tone of warningTones) {
+    playTone(ctx, tone, 0.7);
+  }
+
+  if ("vibrate" in navigator) {
+    navigator.vibrate(120);
+  }
+}
+
 /** Play a short preview of a sound (one loop). */
 export function previewSound(id: AlarmSoundId): void {
   if (typeof window === "undefined") return;

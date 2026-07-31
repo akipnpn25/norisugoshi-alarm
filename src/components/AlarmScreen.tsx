@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, Hand, Sun } from "lucide-react";
+import {
+  ArrowRight,
+  Coffee,
+  Hand,
+  Sun,
+} from "lucide-react";
 
 import { Button } from "@/src/components/ui/button";
 import type { AlarmConfig } from "@/src/lib/types";
@@ -15,16 +20,25 @@ interface AlarmScreenProps {
 const HOLD_DURATION_MS = 1600;
 const SLIDE_COMPLETE_VALUE = 94;
 
-export function AlarmScreen({ config, onStop }: AlarmScreenProps) {
+export function AlarmScreen({
+  config,
+  onStop,
+}: AlarmScreenProps) {
   const [pulse, setPulse] = useState(false);
   const [holdProgress, setHoldProgress] = useState(0);
   const [slideValue, setSlideValue] = useState(0);
-  const holdIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const holdIntervalRef =
+    useRef<ReturnType<typeof setInterval> | null>(null);
   const holdStartedAtRef = useRef<number | null>(null);
   const stoppingRef = useRef(false);
+  const isBreak = config.mode === "break";
 
   useEffect(() => {
-    const id = setInterval(() => setPulse((p) => !p), 500);
+    const id = setInterval(
+      () => setPulse((current) => !current),
+      500
+    );
+
     return () => clearInterval(id);
   }, []);
 
@@ -33,6 +47,7 @@ export function AlarmScreen({ config, onStop }: AlarmScreenProps) {
       clearInterval(holdIntervalRef.current);
       holdIntervalRef.current = null;
     }
+
     holdStartedAtRef.current = null;
   };
 
@@ -42,25 +57,34 @@ export function AlarmScreen({ config, onStop }: AlarmScreenProps) {
 
   const finishStop = () => {
     if (stoppingRef.current) return;
+
     stoppingRef.current = true;
     clearHold();
     onStop();
   };
 
   const startHold = () => {
-    if (stoppingRef.current || holdIntervalRef.current) return;
+    if (
+      stoppingRef.current ||
+      holdIntervalRef.current
+    ) {
+      return;
+    }
 
     holdStartedAtRef.current = performance.now();
     setHoldProgress(0);
 
     holdIntervalRef.current = setInterval(() => {
       const startedAt = holdStartedAtRef.current;
+
       if (startedAt === null) return;
 
       const progress = Math.min(
         1,
-        (performance.now() - startedAt) / HOLD_DURATION_MS
+        (performance.now() - startedAt) /
+          HOLD_DURATION_MS
       );
+
       setHoldProgress(progress);
 
       if (progress >= 1) {
@@ -71,19 +95,24 @@ export function AlarmScreen({ config, onStop }: AlarmScreenProps) {
 
   const cancelHold = () => {
     if (stoppingRef.current) return;
+
     clearHold();
     setHoldProgress(0);
   };
 
   const handleSlide = (value: number) => {
     setSlideValue(value);
+
     if (value >= SLIDE_COMPLETE_VALUE) {
       finishStop();
     }
   };
 
   const resetSlide = () => {
-    if (!stoppingRef.current && slideValue < SLIDE_COMPLETE_VALUE) {
+    if (
+      !stoppingRef.current &&
+      slideValue < SLIDE_COMPLETE_VALUE
+    ) {
       setSlideValue(0);
     }
   };
@@ -95,20 +124,37 @@ export function AlarmScreen({ config, onStop }: AlarmScreenProps) {
           pulse ? "scale-110" : "scale-100"
         }`}
       >
-        <Sun className="text-moon animate-pulse-glow" size={64} />
+        {isBreak ? (
+          <Coffee
+            className="text-moon animate-pulse-glow"
+            size={64}
+          />
+        ) : (
+          <Sun
+            className="text-moon animate-pulse-glow"
+            size={64}
+          />
+        )}
       </div>
 
       <p className="mb-2 rounded-full bg-moon/15 px-3 py-1.5 text-xs font-extrabold text-moon">
         {config.wakeStyle.label}
       </p>
       <h2 className="text-center text-3xl font-extrabold text-moon">
-        おはよう！
+        {isBreak ? "休憩終了です" : "おはよう！"}
       </h2>
       <p className="mt-3.5 text-center text-2xl font-extrabold text-foreground">
-        まもなく{config.station.name}です
+        {isBreak
+          ? "休憩時間が終わりました"
+          : `まもなく${config.station.name}です`}
       </p>
       <p className="mt-2.5 text-base text-muted-foreground">
-        {formatTimeWithDay(config.arrivalTime)} 到着予定
+        {formatTimeWithDay(
+          isBreak
+            ? config.alarmTime
+            : config.arrivalTime
+        )}
+        {isBreak ? " 終了予定" : " 到着予定"}
       </p>
 
       <div className="h-12" />
@@ -121,7 +167,9 @@ export function AlarmScreen({ config, onStop }: AlarmScreenProps) {
             className="w-full animate-alarm-shake"
           >
             <Hand size={20} className="mr-2" />
-            起きました！
+            {isBreak
+              ? "休憩を終える"
+              : "起きました！"}
           </Button>
           <p className="mt-4 text-[13px] text-muted-foreground">
             タップするとアラームが止まります
@@ -142,7 +190,9 @@ export function AlarmScreen({ config, onStop }: AlarmScreenProps) {
             <span
               aria-hidden="true"
               className="absolute inset-y-0 left-0 bg-moon/20 transition-[width]"
-              style={{ width: `${holdProgress * 100}%` }}
+              style={{
+                width: `${holdProgress * 100}%`,
+              }}
             />
             <span className="relative flex items-center justify-center">
               <Hand size={20} className="mr-2" />
@@ -169,7 +219,11 @@ export function AlarmScreen({ config, onStop }: AlarmScreenProps) {
               step="1"
               value={slideValue}
               aria-label="右までスライドしてアラームを停止"
-              onChange={(event) => handleSlide(Number(event.target.value))}
+              onChange={(event) =>
+                handleSlide(
+                  Number(event.target.value)
+                )
+              }
               onPointerUp={resetSlide}
               onPointerCancel={resetSlide}
               className="h-11 w-full cursor-pointer accent-moon"

@@ -13,6 +13,9 @@ export interface StoredActiveAlarm {
   alarmTime: string;
   demoMode: AlarmConfig["demoMode"];
   earphoneConnected: boolean;
+  breakStartedAt?: string;
+  breakDurationMinutes?: number;
+  breakWarningEnabled?: boolean;
   historyId: string;
 }
 
@@ -31,6 +34,9 @@ export function saveActiveAlarm(
     alarmTime: config.alarmTime.toISOString(),
     demoMode: config.demoMode,
     earphoneConnected: config.earphoneConnected,
+    breakStartedAt: config.breakStartedAt?.toISOString(),
+    breakDurationMinutes: config.breakDurationMinutes,
+    breakWarningEnabled: config.breakWarningEnabled,
     historyId,
   };
 
@@ -72,8 +78,12 @@ export function loadActiveAlarm(): {
     const stored = JSON.parse(raw) as StoredActiveAlarm;
     const arrivalTime = new Date(stored.arrivalTime);
     const alarmTime = new Date(stored.alarmTime);
+    const mode = stored.mode === "break" ? "break" : "transit";
+    const breakStartedAt = stored.breakStartedAt
+      ? new Date(stored.breakStartedAt)
+      : undefined;
 
-    const invalid =
+    const invalidBase =
       !stored.station ||
       !stored.leadTime ||
       !stored.demoMode ||
@@ -81,7 +91,14 @@ export function loadActiveAlarm(): {
       Number.isNaN(arrivalTime.getTime()) ||
       Number.isNaN(alarmTime.getTime());
 
-    if (invalid) {
+    const invalidBreak =
+      mode === "break" &&
+      (!breakStartedAt ||
+        Number.isNaN(breakStartedAt.getTime()) ||
+        !Number.isInteger(stored.breakDurationMinutes) ||
+        (stored.breakDurationMinutes ?? 0) < 1);
+
+    if (invalidBase || invalidBreak) {
       clearActiveAlarm();
       return null;
     }
@@ -92,7 +109,7 @@ export function loadActiveAlarm(): {
 
     return {
       config: {
-        mode: stored.mode ?? "transit",
+        mode,
         station: stored.station,
         arrivalTime,
         leadTime: stored.leadTime,
@@ -102,6 +119,9 @@ export function loadActiveAlarm(): {
         earphoneConnected: Boolean(
           stored.earphoneConnected
         ),
+        breakStartedAt,
+        breakDurationMinutes: stored.breakDurationMinutes,
+        breakWarningEnabled: Boolean(stored.breakWarningEnabled),
       },
       historyId: stored.historyId,
     };
@@ -114,4 +134,3 @@ export function loadActiveAlarm(): {
     return null;
   }
 }
-

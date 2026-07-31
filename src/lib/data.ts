@@ -1,4 +1,9 @@
-import type { LeadTimeOption, Station, WakeStyleOption } from "./types";
+import type {
+  BreakDurationOption,
+  LeadTimeOption,
+  Station,
+  WakeStyleOption,
+} from "./types";
 
 export const STATIONS: Station[] = [
   { id: "shinjuku", name: "新宿駅", kana: "しんじゅくえき" },
@@ -48,3 +53,20 @@ export const WAKE_STYLES: WakeStyleOption[] = [
 ];
 
 export const DEFAULT_WAKE_STYLE_ID = "standard";
+
+export const BREAK_DURATION_OPTIONS: Exclude<
+  BreakDurationOption,
+  "custom"
+>[] = [10, 15, 30, 60];
+
+export const BREAK_STATION: Station = {
+  id: "break",
+  name: "休憩",
+  kana: "きゅうけい",
+};
+
+export const BREAK_END_LEAD_TIME: LeadTimeOption = {
+  id: "0min",
+  label: "終了時刻",
+  minutesBefore: 0,
+};
