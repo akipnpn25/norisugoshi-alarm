@@ -7,6 +7,8 @@ interface TimeWheelPickerProps {
   hour: number;
   minute: number;
   onComplete: (hour: number, minute: number) => void;
+  label?: string;
+  editorTitle?: string;
 }
 
 const ITEM_HEIGHT = 44;
@@ -35,67 +37,139 @@ function WheelColumn({
 }) {
   const listRef = useRef<HTMLDivElement>(null);
   const scrollTimer = useRef<number | null>(null);
+  const selectedRef = useRef(selected);
 
   useEffect(() => {
-    const el = listRef.current;
-    if (!el) return;
-    const targetTop = selected * ITEM_HEIGHT;
-    if (Math.abs(el.scrollTop - targetTop) > 1) {
-      el.scrollTo({ top: targetTop, behavior: "smooth" });
-    }
+    selectedRef.current = selected;
+
+    const frame = window.requestAnimationFrame(() => {
+      const el = listRef.current;
+      if (!el) return;
+
+      // 選択中の値を中央へ即座に合わせる。
+      // smoothを使わず、スクロールイベントとの競合を防ぐ。
+      el.scrollTop = selected * ITEM_HEIGHT;
+    });
+
+    return () => window.cancelAnimationFrame(frame);
   }, [selected]);
+
+  useEffect(() => {
+    return () => {
+      if (scrollTimer.current) {
+        window.clearTimeout(scrollTimer.current);
+      }
+    };
+  }, []);
+
+  const selectValue = (value: number) => {
+    const index = values.indexOf(value);
+    const el = listRef.current;
+
+    if (el && index >= 0) {
+      el.scrollTop = index * ITEM_HEIGHT;
+    }
+
+    selectedRef.current = value;
+    onChange(value);
+  };
 
   const handleScroll = () => {
     const el = listRef.current;
     if (!el) return;
-    if (scrollTimer.current) window.clearTimeout(scrollTimer.current);
+
+    if (scrollTimer.current) {
+      window.clearTimeout(scrollTimer.current);
+    }
+
     scrollTimer.current = window.setTimeout(() => {
-      const idx = Math.round(el.scrollTop / ITEM_HEIGHT);
-      const clamped = Math.max(0, Math.min(values.length - 1, idx));
-      if (clamped !== selected) {
-        el.scrollTo({ top: clamped * ITEM_HEIGHT, behavior: "smooth" });
-        onChange(values[clamped]);
+      const index = Math.round(
+        el.scrollTop / ITEM_HEIGHT
+      );
+      const clampedIndex = Math.max(
+        0,
+        Math.min(values.length - 1, index)
+      );
+      const targetTop = clampedIndex * ITEM_HEIGHT;
+      const nextValue = values[clampedIndex];
+
+      // 端数だけを補正し、追加の滑らかなアニメーションは行わない。
+      if (Math.abs(el.scrollTop - targetTop) > 0.5) {
+        el.scrollTop = targetTop;
       }
-    }, 90);
+
+      if (nextValue !== selectedRef.current) {
+        selectedRef.current = nextValue;
+        onChange(nextValue);
+      }
+    }, 120);
   };
 
   return (
-    <div className="relative flex-1 overflow-hidden" style={{ height: PICKER_HEIGHT }}>
+    <div
+      className="relative flex-1 overflow-hidden"
+      style={{ height: PICKER_HEIGHT }}
+    >
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[36%] bg-gradient-to-b from-night-card to-transparent" />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[36%] bg-gradient-to-t from-night-card to-transparent" />
       <div
         className="pointer-events-none absolute inset-x-3 z-0 rounded-2xl border-y border-moon/30 bg-moon/10"
-        style={{ top: PAD_COUNT * ITEM_HEIGHT, height: ITEM_HEIGHT }}
+        style={{
+          top: PAD_COUNT * ITEM_HEIGHT,
+          height: ITEM_HEIGHT,
+        }}
       />
+
       <div
         ref={listRef}
         onScroll={handleScroll}
-        className="h-full overflow-y-auto scrollbar-hide snap-y snap-mandatory"
-        style={{ scrollPaddingTop: PAD_COUNT * ITEM_HEIGHT }}
+        className="h-full snap-y snap-mandatory overflow-y-auto overscroll-contain scrollbar-hide"
       >
-        <div style={{ height: PAD_COUNT * ITEM_HEIGHT }} />
-        {values.map((v) => {
-          const isSel = v === selected;
+        <div
+          aria-hidden="true"
+          style={{ height: PAD_COUNT * ITEM_HEIGHT }}
+        />
+
+        {values.map((value) => {
+          const isSelected = value === selected;
+
           return (
-            <div key={v} className="snap-center" style={{ height: ITEM_HEIGHT }}>
+            <div
+              key={value}
+              className="snap-center"
+              style={{ height: ITEM_HEIGHT }}
+            >
               <button
-                onClick={() => onChange(v)}
+                type="button"
+                onClick={() => selectValue(value)}
                 className={`flex h-full w-full items-center justify-center text-3xl font-extrabold tabular-nums transition-colors ${
-                  isSel ? "text-moon scale-105" : "text-muted-foreground/60"
+                  isSelected
+                    ? "scale-105 text-moon"
+                    : "text-muted-foreground/60"
                 }`}
               >
-                {format(v)}
+                {format(value)}
               </button>
             </div>
           );
         })}
-        <div style={{ height: PAD_COUNT * ITEM_HEIGHT }} />
+
+        <div
+          aria-hidden="true"
+          style={{ height: PAD_COUNT * ITEM_HEIGHT }}
+        />
       </div>
     </div>
   );
 }
 
-export function TimeWheelPicker({ hour, minute, onComplete }: TimeWheelPickerProps) {
+export function TimeWheelPicker({
+  hour,
+  minute,
+  onComplete,
+  label = "到着予定時刻",
+  editorTitle = "到着時刻を設定",
+}: TimeWheelPickerProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [draftHour, setDraftHour] = useState(hour);
   const [draftMinute, setDraftMinute] = useState(minute);
@@ -125,7 +199,7 @@ export function TimeWheelPicker({ hour, minute, onComplete }: TimeWheelPickerPro
           <Clock className="text-moon-dim" size={22} />
           <div className="text-left">
             <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-              到着予定時刻
+              {label}
             </p>
             <p className="mt-0.5 text-4xl font-extrabold tabular-nums text-moon">
               {pad2(hour)}<span className="text-moon-dim">:</span>{pad2(minute)}
@@ -144,7 +218,9 @@ export function TimeWheelPicker({ hour, minute, onComplete }: TimeWheelPickerPro
     <div className="animate-scale-in rounded-3xl border border-moon/30 bg-night-card p-4">
       {/* ヘッダー */}
       <div className="mb-3 flex items-center justify-between">
-        <span className="text-sm font-bold text-foreground">到着時刻を設定</span>
+        <span className="text-sm font-bold text-foreground">
+          {editorTitle}
+        </span>
         <div className="flex items-center gap-2">
           <button
             onClick={() => {

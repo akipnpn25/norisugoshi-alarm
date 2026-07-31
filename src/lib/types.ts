@@ -68,6 +68,49 @@ export interface AlarmInput {
   wakeStyleId: WakeStyleId;
 }
 
+export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+export type RepeatPattern = "daily" | "weekdays" | "custom";
+
+export interface RecurringScheduleBase {
+  id: string;
+  enabled: boolean;
+  repeatPattern: RepeatPattern;
+  weekdays: Weekday[];
+  skippedDates: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TransitRecurringSchedule
+  extends RecurringScheduleBase {
+  mode: "transit";
+  station: Station;
+  arrivalHour: number;
+  arrivalMinute: number;
+  leadTimeId: LeadTimeId;
+  wakeStyleId: WakeStyleId;
+}
+
+export interface BreakRecurringSchedule
+  extends RecurringScheduleBase {
+  mode: "break";
+  startHour: number;
+  startMinute: number;
+  durationMinutes: number;
+  warningEnabled: boolean;
+  wakeStyleId: WakeStyleId;
+}
+
+export type RecurringSchedule =
+  | TransitRecurringSchedule
+  | BreakRecurringSchedule;
+
+export interface RecurringScheduleOccurrence {
+  schedule: RecurringSchedule;
+  triggerAt: Date;
+  targetAt: Date;
+}
+
 export interface AudioRoute {
   type: "headphones" | "receiver" | "speaker" | "bluetooth" | "unknown";
   name: string;

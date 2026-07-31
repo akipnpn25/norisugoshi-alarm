@@ -8,6 +8,8 @@ import { HistoryScreen } from "@/src/components/HistoryScreen";
 import { HomeScreen } from "@/src/components/HomeScreen";
 import { PhoneFrame } from "@/src/components/PhoneFrame";
 import { RestScreen } from "@/src/components/RestScreen";
+import { ScheduleScreen } from "@/src/components/ScheduleScreen";
+import { ScheduleShortcut } from "@/src/components/ScheduleShortcut";
 import { SettingsScreen } from "@/src/components/SettingsScreen";
 import { SetupModeSwitch } from "@/src/components/SetupModeSwitch";
 import { SetupScreen } from "@/src/components/SetupScreen";
@@ -46,6 +48,13 @@ import {
   recordStationUse,
   type StationRow,
 } from "@/src/lib/stations";
+import {
+  getNextRecurringOccurrence,
+  isScheduleNormallyForDate,
+  loadRecurringSchedules,
+  saveRecurringSchedules,
+  toLocalDateKey,
+} from "@/src/lib/schedule-storage";
 import { supabase } from "@/src/lib/supabase";
 import { calculateAlarmTime } from "@/src/lib/time";
 import type {
@@ -53,6 +62,9 @@ import type {
   AlarmInput,
   BreakDurationOption,
   BreakInput,
+  LeadTimeId,
+  RecurringSchedule,
+  RecurringScheduleOccurrence,
   Screen,
   SetupMode,
   Station,
@@ -97,6 +109,66 @@ function getBreakDurationOption(
   );
 
   return preset ?? "custom";
+}
+
+
+function getSafeLeadTimeId(value: string): LeadTimeId {
+  return LEAD_TIMES.some((item) => item.id === value)
+    ? (value as LeadTimeId)
+    : DEFAULT_LEAD_TIME_ID;
+}
+
+function buildRecurringAlarmConfig(
+  occurrence: RecurringScheduleOccurrence,
+  earphoneConnected: boolean
+): AlarmConfig | null {
+  const { schedule, triggerAt, targetAt } = occurrence;
+  const wakeStyle =
+    WAKE_STYLES.find(
+      (style) => style.id === schedule.wakeStyleId
+    ) ?? WAKE_STYLES[1];
+
+  if (schedule.mode === "transit") {
+    const leadTime =
+      LEAD_TIMES.find(
+        (item) => item.id === schedule.leadTimeId
+      ) ?? LEAD_TIMES[1];
+
+    return {
+      mode: "transit",
+      station: schedule.station,
+      arrivalTime: targetAt,
+      leadTime,
+      wakeStyle,
+      alarmTime: triggerAt,
+      demoMode: {
+        id: "normal",
+        label: "通常",
+        offsetSeconds: null,
+      },
+      earphoneConnected,
+    };
+  }
+
+  return {
+    mode: "break",
+    station: BREAK_STATION,
+    arrivalTime: targetAt,
+    leadTime: BREAK_END_LEAD_TIME,
+    wakeStyle,
+    alarmTime: targetAt,
+    demoMode: {
+      id: "normal",
+      label: "通常",
+      offsetSeconds: null,
+    },
+    earphoneConnected,
+    breakStartedAt: triggerAt,
+    breakDurationMinutes: schedule.durationMinutes,
+    breakWarningEnabled:
+      schedule.warningEnabled &&
+      schedule.durationMinutes > 5,
+  };
 }
 
 async function createAlarmHistory(
@@ -169,6 +241,12 @@ export default function Home() {
   const [screen, setScreen] = useState<Screen>("rest");
   const [setupMode, setSetupMode] =
     useState<SetupMode>("transit");
+  const [showSchedules, setShowSchedules] =
+    useState(false);
+  const [recurringSchedules, setRecurringSchedules] =
+    useState<RecurringSchedule[]>([]);
+  const [schedulesReady, setSchedulesReady] =
+    useState(false);
 
   const [input, setInput] = useState<AlarmInput>({
     station: null,
@@ -197,6 +275,12 @@ export default function Home() {
     useRef<ReturnType<typeof setTimeout> | null>(null);
   const warningTimerRef =
     useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recurringTimerRef =
+    useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recurringActionRef =
+    useRef<(occurrence: RecurringScheduleOccurrence) => void>(
+      () => {}
+    );
   const historyIdRef = useRef<string | null>(null);
   const historyInsertRef =
     useRef<Promise<void> | null>(null);
@@ -215,6 +299,8 @@ export default function Home() {
 
   useEffect(() => {
     setAlarmSoundId(getStoredAlarmSound());
+    setRecurringSchedules(loadRecurringSchedules());
+    setSchedulesReady(true);
     setInput((prev) => ({
       ...prev,
       wakeStyleId: getStoredWakeStyle("transit"),
@@ -236,6 +322,10 @@ export default function Home() {
       if (warningTimerRef.current) {
         clearTimeout(warningTimerRef.current);
       }
+
+      if (recurringTimerRef.current) {
+        clearTimeout(recurringTimerRef.current);
+      }
     };
   }, []);
 
@@ -243,6 +333,11 @@ export default function Home() {
     const rows = await fetchStations();
     setStations(rows);
   };
+
+  useEffect(() => {
+    if (!schedulesReady) return;
+    saveRecurringSchedules(recurringSchedules);
+  }, [recurringSchedules, schedulesReady]);
 
   useEffect(() => {
     const unsubscribe = onAudioDeviceChange((route) => {
@@ -410,6 +505,146 @@ export default function Home() {
     setTab("active");
   };
 
+
+recurringActionRef.current = (
+  occurrence: RecurringScheduleOccurrence
+) => {
+  if (historyIdRef.current) return;
+
+  const recurringConfig = buildRecurringAlarmConfig(
+    occurrence,
+    earphoneConnected
+  );
+
+  if (!recurringConfig) return;
+
+  setSetupMode(occurrence.schedule.mode);
+  setShowSchedules(false);
+  commitAlarm(recurringConfig);
+};
+
+useEffect(() => {
+  if (
+    !schedulesReady ||
+    config !== null ||
+    screen === "alarm"
+  ) {
+    return;
+  }
+
+  if (recurringTimerRef.current) {
+    clearTimeout(recurringTimerRef.current);
+    recurringTimerRef.current = null;
+  }
+
+  const occurrence = getNextRecurringOccurrence(
+    recurringSchedules
+  );
+
+  if (!occurrence) return;
+
+  const delay =
+    occurrence.triggerAt.getTime() - Date.now();
+
+  if (delay <= 0) {
+    recurringActionRef.current(occurrence);
+    return;
+  }
+
+  recurringTimerRef.current = setTimeout(() => {
+    recurringTimerRef.current = null;
+    recurringActionRef.current(occurrence);
+  }, delay);
+
+  return () => {
+    if (recurringTimerRef.current) {
+      clearTimeout(recurringTimerRef.current);
+      recurringTimerRef.current = null;
+    }
+  };
+}, [
+  config,
+  recurringSchedules,
+  schedulesReady,
+  screen,
+]);
+
+const handleSaveRecurringSchedule = (
+  schedule: RecurringSchedule
+) => {
+  setRecurringSchedules((current) => {
+    const exists = current.some(
+      (item) => item.id === schedule.id
+    );
+
+    return exists
+      ? current.map((item) =>
+          item.id === schedule.id ? schedule : item
+        )
+      : [...current, schedule];
+  });
+};
+
+const handleDeleteRecurringSchedule = (
+  scheduleId: string
+) => {
+  setRecurringSchedules((current) =>
+    current.filter(
+      (schedule) => schedule.id !== scheduleId
+    )
+  );
+};
+
+const handleToggleRecurringSchedule = (
+  scheduleId: string
+) => {
+  setRecurringSchedules((current) =>
+    current.map((schedule) =>
+      schedule.id === scheduleId
+        ? {
+            ...schedule,
+            enabled: !schedule.enabled,
+            updatedAt: new Date().toISOString(),
+          }
+        : schedule
+    )
+  );
+};
+
+const handleToggleTodaySkip = (
+  scheduleId: string
+) => {
+  const today = new Date();
+  const todayKey = toLocalDateKey(today);
+
+  setRecurringSchedules((current) =>
+    current.map((schedule) => {
+      if (
+        schedule.id !== scheduleId ||
+        !isScheduleNormallyForDate(
+          schedule,
+          today
+        )
+      ) {
+        return schedule;
+      }
+
+      const skipped =
+        schedule.skippedDates.includes(todayKey);
+
+      return {
+        ...schedule,
+        skippedDates: skipped
+          ? schedule.skippedDates.filter(
+              (date) => date !== todayKey
+            )
+          : [...schedule.skippedDates, todayKey],
+        updatedAt: new Date().toISOString(),
+      };
+    })
+  );
+};
+
   const handleSetRealAlarm = () => {
     if (!input.station) return;
 
@@ -524,6 +759,7 @@ export default function Home() {
 
   const handleTabChange = (next: Tab) => {
     if (screen === "alarm") return;
+    if (next !== "alarm") setShowSchedules(false);
     setTab(next);
   };
 
@@ -551,6 +787,7 @@ export default function Home() {
     );
 
     if (station) {
+      setShowSchedules(false);
       setSetupMode("transit");
       setInput((prev) => ({
         ...prev,
@@ -626,57 +863,116 @@ export default function Home() {
               />
             )}
 
-            {tab === "alarm" && (
-              <>
-                <SetupModeSwitch
-                  mode={setupMode}
-                  onChange={setSetupMode}
+            {tab === "alarm" &&
+              (showSchedules ? (
+                <ScheduleScreen
+                  schedules={recurringSchedules}
+                  stations={stations}
+                  defaultMode={setupMode}
+                  transitDefaults={{
+                    station: input.station,
+                    arrivalHour:
+                      input.arrivalTime.getHours(),
+                    arrivalMinute:
+                      input.arrivalTime.getMinutes(),
+                    leadTimeId: getSafeLeadTimeId(
+                      input.leadTimeId
+                    ),
+                    wakeStyleId: input.wakeStyleId,
+                  }}
+                  breakDefaults={{
+                    durationMinutes:
+                      getBreakDurationMinutes(
+                        breakInput
+                      ) ?? 15,
+                    warningEnabled:
+                      breakInput.warningEnabled,
+                    wakeStyleId:
+                      breakInput.wakeStyleId,
+                  }}
+                  onSave={
+                    handleSaveRecurringSchedule
+                  }
+                  onDelete={
+                    handleDeleteRecurringSchedule
+                  }
+                  onToggleEnabled={
+                    handleToggleRecurringSchedule
+                  }
+                  onToggleTodaySkip={
+                    handleToggleTodaySkip
+                  }
+                  onClose={() =>
+                    setShowSchedules(false)
+                  }
                 />
+              ) : (
+                <>
+                  <SetupModeSwitch
+                    mode={setupMode}
+                    onChange={setSetupMode}
+                  />
+                  <ScheduleShortcut
+                    schedules={recurringSchedules}
+                    onOpen={() =>
+                      setShowSchedules(true)
+                    }
+                  />
 
-                {setupMode === "transit" ? (
-                  <SetupScreen
-                    input={input}
-                    onInputChange={handleInputChange}
-                    onWakeStyleChange={
-                      handleWakeStyleChange
-                    }
-                    earphoneChecked={earphoneChecked}
-                    earphoneConnected={
-                      earphoneConnected
-                    }
-                    routeName={routeName}
-                    stations={stations}
-                    onSetAlarm={handleSetRealAlarm}
-                    onHeadphoneCheckEnd={
-                      handleHeadphoneCheckEnd
-                    }
-                    onSelectStation={
-                      handleSelectStationRow
-                    }
-                    onAddStation={handleAddStation}
-                  />
-                ) : (
-                  <BreakSetupScreen
-                    input={breakInput}
-                    onInputChange={
-                      handleBreakInputChange
-                    }
-                    onWakeStyleChange={
-                      handleBreakWakeStyleChange
-                    }
-                    earphoneChecked={earphoneChecked}
-                    earphoneConnected={
-                      earphoneConnected
-                    }
-                    routeName={routeName}
-                    onSetBreak={handleSetBreak}
-                    onHeadphoneCheckEnd={
-                      handleHeadphoneCheckEnd
-                    }
-                  />
-                )}
-              </>
-            )}
+                  {setupMode === "transit" ? (
+                    <SetupScreen
+                      input={input}
+                      onInputChange={
+                        handleInputChange
+                      }
+                      onWakeStyleChange={
+                        handleWakeStyleChange
+                      }
+                      earphoneChecked={
+                        earphoneChecked
+                      }
+                      earphoneConnected={
+                        earphoneConnected
+                      }
+                      routeName={routeName}
+                      stations={stations}
+                      onSetAlarm={
+                        handleSetRealAlarm
+                      }
+                      onHeadphoneCheckEnd={
+                        handleHeadphoneCheckEnd
+                      }
+                      onSelectStation={
+                        handleSelectStationRow
+                      }
+                      onAddStation={
+                        handleAddStation
+                      }
+                    />
+                  ) : (
+                    <BreakSetupScreen
+                      input={breakInput}
+                      onInputChange={
+                        handleBreakInputChange
+                      }
+                      onWakeStyleChange={
+                        handleBreakWakeStyleChange
+                      }
+                      earphoneChecked={
+                        earphoneChecked
+                      }
+                      earphoneConnected={
+                        earphoneConnected
+                      }
+                      routeName={routeName}
+                      onSetBreak={handleSetBreak}
+                      onHeadphoneCheckEnd={
+                        handleHeadphoneCheckEnd
+                      }
+                    />
+                  )}
+                </>
+              ))}
 
             {tab === "active" &&
               (config ? (
@@ -740,3 +1036,4 @@ function NoActiveAlarm({
     </div>
   );
 }
+
