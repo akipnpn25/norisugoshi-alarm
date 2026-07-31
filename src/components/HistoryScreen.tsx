@@ -135,8 +135,8 @@ export function HistoryScreen() {
                 />
                 <Meta
                   icon={<Headphones size={14} />}
-                  label="イヤホン"
-                  value={r.earphone_connected ? "接続" : "未接続"}
+                  label="出力先"
+                  value={r.earphone_connected ? "イヤホン" : "本体スピーカー"}
                 />
               </div>
               <p className="mt-3 text-right text-[11px] text-muted-foreground">

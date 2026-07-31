@@ -31,7 +31,7 @@ export function HomeScreen({
   const steps = [
     { icon: <MapPin size={18} />, text: "目的地を選ぶ" },
     { icon: <Clock size={18} />, text: "到着時刻を入力" },
-    { icon: <Bell size={18} />, text: "イヤホン確認してセット" },
+    { icon: <Bell size={18} />, text: "音の出力先を試し音で確認" },
     { icon: <Music size={18} />, text: "設定でアラーム音を選ぶ" },
   ];
 
@@ -49,13 +49,13 @@ export function HomeScreen({
           防ぐアラーム
         </h1>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-          イヤホンで優しく起こす、
+          イヤホンでも、本体スピーカーでも。
           <br />
           電車の仮眠に安心を。
         </p>
       </div>
 
-      {/* アラーム音・イヤホン設定 */}
+      {/* アラーム音・出力先設定 */}
       <button
         onClick={onGoToSettings}
         className={`flex w-full items-center gap-3 rounded-2xl border px-4 py-3.5 transition-colors ${
@@ -63,7 +63,7 @@ export function HomeScreen({
             ? "border-border bg-card"
             : earphoneConnected
               ? "border-success/40 bg-success/10"
-              : "border-destructive/35 bg-destructive/10"
+              : "border-moon/35 bg-moon/10"
         }`}
       >
         <Music
@@ -73,25 +73,25 @@ export function HomeScreen({
               ? "text-moon"
               : earphoneConnected
                 ? "text-success"
-                : "text-destructive"
+                : "text-moon"
           }
         />
         <div className="flex-1 text-left">
-          <p className="text-[13px] text-muted-foreground">アラーム音・イヤホン設定</p>
+          <p className="text-[13px] text-muted-foreground">アラーム音・出力先設定</p>
           <p
             className={`text-base font-bold ${
               !earphoneChecked
                 ? "text-foreground"
                 : earphoneConnected
                   ? "text-success"
-                  : "text-destructive"
+                  : "text-moon"
             }`}
           >
             {!earphoneChecked
-              ? `${alarmSoundLabel}・未確認`
+              ? `${alarmSoundLabel}・出力先未確認`
               : earphoneConnected
-                ? `${alarmSoundLabel}・接続中`
-                : `${alarmSoundLabel}・未接続`}
+                ? `${alarmSoundLabel}・イヤホン`
+                : `${alarmSoundLabel}・本体スピーカー`}
           </p>
         </div>
         <ArrowRight size={18} className="text-muted-foreground" />

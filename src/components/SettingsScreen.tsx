@@ -37,7 +37,7 @@ export function SettingsScreen({
           設定
         </h1>
         <p className="mt-1.5 text-sm text-muted-foreground">
-          テーマ・アラーム音・イヤホン確認
+          テーマ・アラーム音・出力先確認
         </p>
       </div>
 
@@ -98,10 +98,10 @@ export function SettingsScreen({
         })}
       </div>
 
-      {/* イヤホン接続確認 */}
+      {/* 音の出力先確認 */}
       <p className="mb-3 mt-6 text-base font-bold text-foreground flex items-center gap-1.5">
         <Headphones size={18} className="text-moon" />
-        イヤホン接続確認
+        音の出力先確認
       </p>
       <HeadphoneCheckCard
         checked={earphoneChecked}
@@ -113,8 +113,8 @@ export function SettingsScreen({
       {/* 説明 */}
       <Card className="mt-6 bg-card px-5 py-4">
         <p className="text-[13px] leading-relaxed text-muted-foreground">
-          アラームはイヤホンを通して再生されます。上で接続状態を確認できます。
-          アラーム音はタップして試聴できます。
+          イヤホン接続中はイヤホンから、未接続時は本体スピーカーから再生されます。
+          アラーム音を試聴して、実際の出力先と音量を確認してください。
         </p>
       </Card>
     </div>

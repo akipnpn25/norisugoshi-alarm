@@ -3,7 +3,6 @@
 import { useState } from "react";
 import {
   Headphones,
-  AlertTriangle,
   Volume2,
 } from "lucide-react";
 
@@ -40,7 +39,7 @@ export function HeadphoneCheckCard({
     const route = await getAudioRoute();
     const routeError =
       route.type === "unknown" && !route.connected
-        ? "イヤホン状態を取得できませんでした。ブラウザのオーディオ設定をご確認ください。"
+        ? "出力先を自動判定できませんでした。試し音で実際の再生先をご確認ください。"
         : null;
     setError(routeError);
     onCheckEnd(route.connected, route.name, routeError);
@@ -50,7 +49,7 @@ export function HeadphoneCheckCard({
   if (!checked) {
     return (
       <Button variant="secondary" onClick={check} disabled={checking} className="w-full">
-        {checking ? "確認中..." : "イヤホン接続を確認"}
+        {checking ? "確認中..." : "音の出力先を確認（任意）"}
       </Button>
     );
   }
@@ -93,20 +92,32 @@ export function HeadphoneCheckCard({
   }
 
   return (
-    <Card className="flex flex-col items-center border-destructive/35 bg-destructive/10">
-      <AlertTriangle className="text-destructive" size={40} />
-      <p className="mt-2 text-base font-extrabold text-destructive">
-        イヤホンが接続されていません
+    <Card className="flex flex-col items-center border-moon/35 bg-moon/10">
+      <Volume2 className="text-moon" size={40} />
+      <p className="mt-2 text-base font-extrabold text-moon">
+        本体スピーカーで利用できます
       </p>
       <p className="mt-1 text-center text-[13px] text-muted-foreground">
-        {error ?? "イヤホンを接続してください"}
+        {error ?? "イヤホンが未接続の場合は、本体スピーカーから再生されます"}
       </p>
-      <button
-        onClick={check}
-        className="mt-3.5 rounded-xl bg-night-surface px-4 py-2 text-[13px] font-bold text-foreground transition-colors hover:opacity-80"
-      >
-        再確認
-      </button>
+      <p className="mt-3 text-center text-xs text-muted-foreground">
+        実際に聞こえるか、試し音で確認してください
+      </p>
+      <div className="mt-3.5 flex gap-2">
+        <button
+          onClick={() => previewSound(getStoredAlarmSound())}
+          className="flex items-center gap-1.5 rounded-xl bg-moon px-4 py-2 text-[13px] font-bold text-night-deep transition-opacity hover:opacity-90"
+        >
+          <Volume2 size={15} />
+          試し音を再生
+        </button>
+        <button
+          onClick={check}
+          className="rounded-xl bg-night-surface px-4 py-2 text-[13px] font-bold text-foreground transition-colors hover:opacity-80"
+        >
+          再確認
+        </button>
+      </div>
     </Card>
   );
 }

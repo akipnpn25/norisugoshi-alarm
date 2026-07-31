@@ -63,8 +63,6 @@ export function SetupScreen({
 
   const ready =
     input.station !== null &&
-    earphoneChecked &&
-    earphoneConnected &&
     isFuture(alarmTime);
 
   return (
@@ -183,8 +181,8 @@ export function SetupScreen({
         })}
       </div>
 
-      {/* 4. イヤホン接続状態 */}
-      <SectionLabel num="4" text="イヤホン接続確認" icon={<Bell size={16} />} />
+      {/* 4. 音の出力先 */}
+      <SectionLabel num="4" text="音の出力先を確認（任意）" icon={<Bell size={16} />} />
       <HeadphoneCheckCard
         checked={earphoneChecked}
         connected={earphoneConnected}
@@ -238,11 +236,7 @@ export function SetupScreen({
         <p className="mt-3 text-center text-xs text-muted-foreground">
           {!input.station
             ? "目的地を選んでください"
-            : !earphoneChecked
-              ? "イヤホン接続を確認してください"
-              : !earphoneConnected
-                ? "イヤホンを接続してください"
-                : "起床時刻が過ぎています。到着時刻か起こすタイミングを変更してください"}
+            : "起床時刻が過ぎています。到着時刻か起こすタイミングを変更してください"}
         </p>
       )}
     </div>

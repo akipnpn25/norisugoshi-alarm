@@ -51,9 +51,9 @@ export function RestScreen({ config, onCancel }: RestScreenProps) {
       <Card className="px-5 py-5">
         <StatusRow
           icon={<Headphones size={22} />}
-          label="イヤホン"
-          value={config.earphoneConnected ? "✓ 接続中" : "未接続"}
-          ok={config.earphoneConnected}
+          label="出力先"
+          value={config.earphoneConnected ? "イヤホン" : "本体スピーカー"}
+          ok={true}
         />
         <div className="my-2.5 h-px bg-border" />
         <StatusRow
