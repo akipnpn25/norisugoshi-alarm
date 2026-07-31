@@ -6,6 +6,7 @@ import { History, Trash2, Bell, Headphones, Clock, MapPin } from "lucide-react";
 import { Button } from "@/src/components/ui/button";
 import { Card } from "@/src/components/ui/card";
 import { supabase } from "@/src/lib/supabase";
+import { ensureAnonymousSession } from "@/src/lib/auth";
 import type { AlarmHistoryRow } from "@/src/lib/types";
 import { formatDateTime, formatTime } from "@/src/lib/time";
 
@@ -25,6 +26,14 @@ export function HistoryScreen() {
 
   const load = async () => {
     setError(null);
+
+    try {
+      await ensureAnonymousSession();
+    } catch (authError) {
+      console.warn("匿名利用者の準備に失敗:", authError);
+      setError("利用者情報の初期化に失敗しました");
+      return;
+    }
     const { data, error } = await supabase
       .from("alarm_history")
       .select("*")
@@ -38,6 +47,14 @@ export function HistoryScreen() {
   };
 
   const handleClear = async () => {
+    try {
+      await ensureAnonymousSession();
+    } catch (authError) {
+      console.warn("匿名利用者の準備に失敗:", authError);
+      setError("利用者情報の初期化に失敗しました");
+      return;
+    }
+
     const { error } = await supabase.from("alarm_history").delete().neq("id", "00000000-0000-0000-0000-000000000000");
     if (error) {
       setError("履歴の削除に失敗しました");

@@ -13,6 +13,7 @@ import { PhoneFrame } from "@/src/components/PhoneFrame";
 import { DEFAULT_LEAD_TIME_ID, LEAD_TIMES } from "@/src/lib/data";
 import type { AlarmConfig, AlarmInput, Screen, Station, Tab, Theme } from "@/src/lib/types";
 import { supabase } from "@/src/lib/supabase";
+import { ensureAnonymousSession } from "@/src/lib/auth";
 import {
   clearActiveAlarm,
   loadActiveAlarm,
@@ -49,6 +50,13 @@ async function createAlarmHistory(
   cfg: AlarmConfig,
   historyId: string
 ): Promise<void> {
+  try {
+    await ensureAnonymousSession();
+  } catch (error) {
+    console.warn("匿名利用者の準備に失敗:", error);
+    return;
+  }
+
   const { error } = await supabase.from("alarm_history").insert({
     id: historyId,
     station_id: cfg.station.id,
@@ -70,6 +78,13 @@ async function updateAlarmHistoryStatus(
   historyId: string,
   status: "fired" | "cancelled"
 ): Promise<void> {
+  try {
+    await ensureAnonymousSession();
+  } catch (error) {
+    console.warn("匿名利用者の準備に失敗:", error);
+    return;
+  }
+
   const { error } = await supabase
     .from("alarm_history")
     .update({ status })

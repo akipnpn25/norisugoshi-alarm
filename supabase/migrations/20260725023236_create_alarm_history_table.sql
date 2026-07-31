@@ -1,32 +1,17 @@
 /*
-# Create alarm_history table (single-tenant, no auth)
+# Create alarm_history table (per-user anonymous auth)
 
-1. Purpose
-   - アラームの利用履歴を保存するテーブル。
-   - どの駅・到着予定時刻・何分前に起こしたか・デモモードかを記録し、
-     今後の利用統計や改善の参考にする。
-
-2. New Tables
-   - `alarm_history`
-     - `id` (uuid, primary key) — 履歴の一意ID
-     - `station_id` (text, not null) — 選択された目的地のID（例: shinjuku）
-     - `station_name` (text, not null) — 駅名（表示用、例: 新宿駅）
-     - `arrival_time` (timestamptz, not null) — 到着予定時刻
-     - `alarm_time` (timestamptz, not null) — アラーム鳴動予定時刻
-     - `lead_time_minutes` (integer, not null) — 何分前に起こすか（3/5/10）
-     - `demo_mode` (text, not null, default 'normal') — デモモードID
-     - `earphone_connected` (boolean, not null, default false) — イヤホン接続有無
-     - `status` (text, not null, default 'set') — アラーム状態（set/fired/cancelled）
-     - `created_at` (timestamptz, default now()) — 履歴作成日時
-
-3. Security
-   - RLSを有効化。
-   - サインイン画面がないアプリのため、anon + authenticated の両ロールに
-     全CRUDを許可する（データは意図的に共有・公開される単一テナント構成）。
+- 匿名サインインした利用者ごとに履歴を分離する。
+- user_id は auth.uid() を既定値として保存する。
+- RLS により、自分の履歴だけを読み書き・削除できる。
 */
 
-CREATE TABLE IF NOT EXISTS alarm_history (
+CREATE TABLE IF NOT EXISTS public.alarm_history (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL
+    DEFAULT auth.uid()
+    REFERENCES auth.users(id)
+    ON DELETE CASCADE,
   station_id text NOT NULL,
   station_name text NOT NULL,
   arrival_time timestamptz NOT NULL,
@@ -35,26 +20,51 @@ CREATE TABLE IF NOT EXISTS alarm_history (
   demo_mode text NOT NULL DEFAULT 'normal',
   earphone_connected boolean NOT NULL DEFAULT false,
   status text NOT NULL DEFAULT 'set',
-  created_at timestamptz DEFAULT now()
+  created_at timestamptz NOT NULL DEFAULT now()
 );
 
-ALTER TABLE alarm_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.alarm_history ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "anon_select_alarm_history" ON alarm_history;
-CREATE POLICY "anon_select_alarm_history" ON alarm_history FOR SELECT
-  TO anon, authenticated USING (true);
+DROP POLICY IF EXISTS "select_own_alarm_history"
+ON public.alarm_history;
+CREATE POLICY "select_own_alarm_history"
+ON public.alarm_history
+FOR SELECT
+TO authenticated
+USING ((SELECT auth.uid()) = user_id);
 
-DROP POLICY IF EXISTS "anon_insert_alarm_history" ON alarm_history;
-CREATE POLICY "anon_insert_alarm_history" ON alarm_history FOR INSERT
-  TO anon, authenticated WITH CHECK (true);
+DROP POLICY IF EXISTS "insert_own_alarm_history"
+ON public.alarm_history;
+CREATE POLICY "insert_own_alarm_history"
+ON public.alarm_history
+FOR INSERT
+TO authenticated
+WITH CHECK ((SELECT auth.uid()) = user_id);
 
-DROP POLICY IF EXISTS "anon_update_alarm_history" ON alarm_history;
-CREATE POLICY "anon_update_alarm_history" ON alarm_history FOR UPDATE
-  TO anon, authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "update_own_alarm_history"
+ON public.alarm_history;
+CREATE POLICY "update_own_alarm_history"
+ON public.alarm_history
+FOR UPDATE
+TO authenticated
+USING ((SELECT auth.uid()) = user_id)
+WITH CHECK ((SELECT auth.uid()) = user_id);
 
-DROP POLICY IF EXISTS "anon_delete_alarm_history" ON alarm_history;
-CREATE POLICY "anon_delete_alarm_history" ON alarm_history FOR DELETE
-  TO anon, authenticated USING (true);
+DROP POLICY IF EXISTS "delete_own_alarm_history"
+ON public.alarm_history;
+CREATE POLICY "delete_own_alarm_history"
+ON public.alarm_history
+FOR DELETE
+TO authenticated
+USING ((SELECT auth.uid()) = user_id);
 
-CREATE INDEX IF NOT EXISTS idx_alarm_history_created_at
-  ON alarm_history (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_alarm_history_user_created_at
+ON public.alarm_history (user_id, created_at DESC);
+
+REVOKE ALL PRIVILEGES
+ON TABLE public.alarm_history
+FROM anon;
+
+GRANT SELECT, INSERT, UPDATE, DELETE
+ON TABLE public.alarm_history
+TO authenticated;
