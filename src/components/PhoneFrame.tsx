@@ -58,23 +58,29 @@ export function PhoneFrame({
             style={{ animation: "cloud-drift 45s linear infinite" }}
           />
 
-          {/* ステータスバー: イヤホン状態 */}
-          <div className="z-40 flex shrink-0 items-center justify-end px-4 pt-3.5 pb-2 bg-night/60 backdrop-blur-md">
-            <div
-              className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-[13px] font-bold backdrop-blur-sm transition-colors ${
-                !earphoneChecked
-                  ? "bg-white/5 text-muted-foreground"
+          {/* モバイルではiPhoneのステータスバーと重ならないよう、
+              セーフエリアだけ確保して接続状態バッジは非表示にする。
+              PCのスマホプレビューでは従来どおり表示する。 */}
+          <div className="z-40 shrink-0">
+            <div className="h-[env(safe-area-inset-top)] bg-night/60 md:hidden" />
+
+            <div className="hidden items-center justify-end bg-night/60 px-4 pb-2 pt-3.5 backdrop-blur-md md:flex">
+              <div
+                className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-[13px] font-bold backdrop-blur-sm transition-colors ${
+                  !earphoneChecked
+                    ? "bg-white/5 text-muted-foreground"
+                    : earphoneConnected
+                      ? "bg-success/15 text-success"
+                      : "bg-moon/15 text-moon"
+                }`}
+              >
+                <Headphones size={18} />
+                {!earphoneChecked
+                  ? "未確認"
                   : earphoneConnected
-                    ? "bg-success/15 text-success"
-                    : "bg-destructive/12 text-destructive"
-              }`}
-            >
-              <Headphones size={18} />
-              {!earphoneChecked
-                ? "未確認"
-                : earphoneConnected
-                  ? "接続中"
-                  : "未接続"}
+                    ? "接続中"
+                    : "本体スピーカー"}
+              </div>
             </div>
           </div>
 
