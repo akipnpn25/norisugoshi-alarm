@@ -2,14 +2,28 @@
 
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { Moon, MapPin, Clock, Bell, Plus, Search, X } from "lucide-react";
+import {
+  Moon,
+  MapPin,
+  Clock,
+  Bell,
+  Plus,
+  Search,
+  X,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
 
 import { Button } from "@/src/components/ui/button";
 import { Card } from "@/src/components/ui/card";
 import { HeadphoneCheckCard } from "@/src/components/HeadphoneCheckCard";
 import { TimeWheelPicker } from "@/src/components/TimeWheelPicker";
-import { LEAD_TIMES } from "@/src/lib/data";
-import type { AlarmInput, Station } from "@/src/lib/types";
+import { LEAD_TIMES, WAKE_STYLES } from "@/src/lib/data";
+import type {
+  AlarmInput,
+  Station,
+  WakeStyleId,
+} from "@/src/lib/types";
 import type { StationRow } from "@/src/lib/stations";
 import {
   calculateAlarmTime,
@@ -21,6 +35,7 @@ import {
 interface SetupScreenProps {
   input: AlarmInput;
   onInputChange: (patch: Partial<AlarmInput>) => void;
+  onWakeStyleChange: (wakeStyleId: WakeStyleId) => void;
   earphoneChecked: boolean;
   earphoneConnected: boolean;
   routeName: string;
@@ -35,6 +50,7 @@ interface SetupScreenProps {
 export function SetupScreen({
   input,
   onInputChange,
+  onWakeStyleChange,
   earphoneChecked,
   earphoneConnected,
   routeName,
@@ -47,9 +63,13 @@ export function SetupScreen({
 }: SetupScreenProps) {
   const [adding, setAdding] = useState(false);
   const [stationName, setStationName] = useState("");
+  const [choosingWakeStyle, setChoosingWakeStyle] = useState(false);
   const leadTime =
     LEAD_TIMES.find((l) => l.id === input.leadTimeId) ?? LEAD_TIMES[1];
   const alarmTime = calculateAlarmTime(input.arrivalTime, leadTime);
+  const wakeStyle =
+    WAKE_STYLES.find((style) => style.id === input.wakeStyleId) ??
+    WAKE_STYLES[1];
   const hoursUntilArrival =
     (input.arrivalTime.getTime() - Date.now()) / 3600000;
   const isLongWait = hoursUntilArrival > 6;
@@ -182,8 +202,79 @@ export function SetupScreen({
         })}
       </div>
 
-      {/* 4. 音の出力先 */}
-      <SectionLabel num="4" text="音の出力先を確認（任意）" icon={<Bell size={16} />} />
+      {/* 4. 起こし方 */}
+      <SectionLabel num="4" text="起こし方" icon={<Bell size={16} />} />
+      <Card className="bg-card p-0">
+        <button
+          type="button"
+          onClick={() => setChoosingWakeStyle((open) => !open)}
+          className="flex w-full items-center gap-3 px-4 py-4 text-left"
+          aria-expanded={choosingWakeStyle}
+        >
+          <span className="flex-1">
+            <span className="block text-base font-extrabold text-foreground">
+              {wakeStyle.label}
+            </span>
+            <span className="mt-1 block text-[12px] text-muted-foreground">
+              {wakeStyle.description}
+            </span>
+          </span>
+          <span className="flex items-center gap-1 text-[12px] font-bold text-moon">
+            変更
+            {choosingWakeStyle ? (
+              <ChevronUp size={16} />
+            ) : (
+              <ChevronDown size={16} />
+            )}
+          </span>
+        </button>
+
+        {choosingWakeStyle && (
+          <div className="border-t border-border px-3 pb-3 pt-2">
+            {WAKE_STYLES.map((style) => {
+              const selected = style.id === input.wakeStyleId;
+              return (
+                <button
+                  key={style.id}
+                  type="button"
+                  onClick={() => {
+                    onWakeStyleChange(style.id);
+                    setChoosingWakeStyle(false);
+                  }}
+                  className={`mt-2 w-full rounded-2xl border px-4 py-3 text-left transition-all active:scale-[0.99] ${
+                    selected
+                      ? "border-moon bg-moon/15"
+                      : "border-border bg-night-surface/50"
+                  }`}
+                >
+                  <span className="flex items-center justify-between gap-3">
+                    <span>
+                      <span className="block text-[15px] font-extrabold text-foreground">
+                        {style.label}
+                      </span>
+                      <span className="mt-1 block text-[12px] text-muted-foreground">
+                        {style.description}
+                      </span>
+                    </span>
+                    {selected && (
+                      <span className="shrink-0 text-xs font-bold text-moon">
+                        選択中
+                      </span>
+                    )}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </Card>
+
+      <p className="mt-2 text-xs text-muted-foreground">
+        前回選んだ起こし方を次回も自動で使用します。
+      </p>
+
+      {/* 5. 音の出力先 */}
+      <SectionLabel num="5" text="音の出力先を確認（任意）" icon={<Bell size={16} />} />
       <HeadphoneCheckCard
         checked={earphoneChecked}
         connected={earphoneConnected}
@@ -200,8 +291,8 @@ export function SetupScreen({
         </p>
       </Card>
 
-      {/* 5. 計算された起床時刻（概要） */}
-      <SectionLabel num="5" text="起床時刻" />
+      {/* 6. 計算された起床時刻（概要） */}
+      <SectionLabel num="6" text="起床時刻" />
       <Card className="bg-card">
         <div className="flex items-center justify-between">
           <span className="text-sm text-muted-foreground">起床時刻</span>

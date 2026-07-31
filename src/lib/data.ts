@@ -1,4 +1,4 @@
-import type { LeadTimeOption, Station } from "./types";
+import type { LeadTimeOption, Station, WakeStyleOption } from "./types";
 
 export const STATIONS: Station[] = [
   { id: "shinjuku", name: "新宿駅", kana: "しんじゅくえき" },
@@ -28,3 +28,23 @@ export const LEAD_TIMES: LeadTimeOption[] = [
 ];
 
 export const DEFAULT_LEAD_TIME_ID = "5min";
+
+export const WAKE_STYLES: WakeStyleOption[] = [
+  {
+    id: "gentle",
+    label: "やさしく",
+    description: "控えめな音で鳴らし、タップで停止します",
+  },
+  {
+    id: "standard",
+    label: "しっかり",
+    description: "10秒ごとに強くなり、長押しで停止します",
+  },
+  {
+    id: "strong",
+    label: "絶対に起きたい",
+    description: "短い間隔で強くなり、スライドで停止します",
+  },
+];
+
+export const DEFAULT_WAKE_STYLE_ID = "standard";

@@ -10,8 +10,21 @@ import { HistoryScreen } from "@/src/components/HistoryScreen";
 import { SettingsScreen } from "@/src/components/SettingsScreen";
 import { TabBar } from "@/src/components/TabBar";
 import { PhoneFrame } from "@/src/components/PhoneFrame";
-import { DEFAULT_LEAD_TIME_ID, LEAD_TIMES } from "@/src/lib/data";
-import type { AlarmConfig, AlarmInput, Screen, Station, Tab, Theme } from "@/src/lib/types";
+import {
+  DEFAULT_LEAD_TIME_ID,
+  DEFAULT_WAKE_STYLE_ID,
+  LEAD_TIMES,
+  WAKE_STYLES,
+} from "@/src/lib/data";
+import type {
+  AlarmConfig,
+  AlarmInput,
+  Screen,
+  Station,
+  Tab,
+  Theme,
+  WakeStyleId,
+} from "@/src/lib/types";
 import { supabase } from "@/src/lib/supabase";
 import { ensureAnonymousSession } from "@/src/lib/auth";
 import {
@@ -38,6 +51,10 @@ import {
   type AlarmSoundId,
 } from "@/src/lib/sound";
 import { calculateAlarmTime } from "@/src/lib/time";
+import {
+  getStoredWakeStyle,
+  storeWakeStyle,
+} from "@/src/lib/wake-style";
 
 function getDefaultArrival(): Date {
   const d = new Date();
@@ -66,6 +83,7 @@ async function createAlarmHistory(
     lead_time_minutes: cfg.leadTime.minutesBefore,
     demo_mode: cfg.demoMode.id,
     earphone_connected: cfg.earphoneConnected,
+    wake_style: cfg.wakeStyle.id,
     status: "set",
   });
 
@@ -106,6 +124,7 @@ export default function Home() {
     station: null,
     arrivalTime: getDefaultArrival(),
     leadTimeId: DEFAULT_LEAD_TIME_ID,
+    wakeStyleId: DEFAULT_WAKE_STYLE_ID,
   });
 
   const [alarmSoundId, setAlarmSoundId] = useState<AlarmSoundId>("radial");
@@ -120,6 +139,10 @@ export default function Home() {
 
   useEffect(() => {
     setAlarmSoundId(getStoredAlarmSound());
+    setInput((prev) => ({
+      ...prev,
+      wakeStyleId: getStoredWakeStyle("transit"),
+    }));
     loadAlarmSound();
     refreshStations();
     return () => {
@@ -146,8 +169,8 @@ export default function Home() {
     return unsubscribe;
   }, [earphoneChecked]);
 
-  const fireAlarm = () => {
-    playAlarm();
+  const fireAlarm = (cfg: AlarmConfig) => {
+    playAlarm(undefined, cfg.wakeStyle.id);
     setScreen("alarm");
   };
 
@@ -155,10 +178,10 @@ export default function Home() {
     if (timerRef.current) clearTimeout(timerRef.current);
     const delay = cfg.alarmTime.getTime() - Date.now();
     if (delay <= 0) {
-      fireAlarm();
+      fireAlarm(cfg);
       return;
     }
-    timerRef.current = setTimeout(() => fireAlarm(), delay);
+    timerRef.current = setTimeout(() => fireAlarm(cfg), delay);
   };
 
   useEffect(() => {
@@ -178,6 +201,7 @@ export default function Home() {
       station: restoredConfig.station,
       arrivalTime: restoredConfig.arrivalTime,
       leadTimeId: restoredConfig.leadTime.id,
+      wakeStyleId: restoredConfig.wakeStyle.id,
     });
 
     setEarphoneConnected(
@@ -192,6 +216,11 @@ export default function Home() {
 
   const handleInputChange = (patch: Partial<AlarmInput>) => {
     setInput((prev) => ({ ...prev, ...patch }));
+  };
+
+  const handleWakeStyleChange = (wakeStyleId: WakeStyleId) => {
+    setInput((prev) => ({ ...prev, wakeStyleId }));
+    storeWakeStyle("transit", wakeStyleId);
   };
 
   const handleHeadphoneCheckEnd = (
@@ -226,10 +255,15 @@ export default function Home() {
     const leadTime =
       LEAD_TIMES.find((l) => l.id === input.leadTimeId) ?? LEAD_TIMES[1];
     const alarmTime = calculateAlarmTime(input.arrivalTime, leadTime);
+    const wakeStyle =
+      WAKE_STYLES.find((style) => style.id === input.wakeStyleId) ??
+      WAKE_STYLES[1];
     const cfg: AlarmConfig = {
+      mode: "transit",
       station: input.station,
       arrivalTime: input.arrivalTime,
       leadTime,
+      wakeStyle,
       alarmTime,
       demoMode: { id: "normal", label: "通常", offsetSeconds: null },
       earphoneConnected,
@@ -358,6 +392,7 @@ export default function Home() {
               <SetupScreen
                 input={input}
                 onInputChange={handleInputChange}
+                onWakeStyleChange={handleWakeStyleChange}
                 earphoneChecked={earphoneChecked}
                 earphoneConnected={earphoneConnected}
                 routeName={routeName}

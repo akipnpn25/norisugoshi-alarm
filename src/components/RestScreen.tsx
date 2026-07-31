@@ -58,6 +58,13 @@ export function RestScreen({ config, onCancel }: RestScreenProps) {
         <div className="my-2.5 h-px bg-border" />
         <StatusRow
           icon={<Bell size={22} />}
+          label="起こし方"
+          value={config.wakeStyle.label}
+          ok
+        />
+        <div className="my-2.5 h-px bg-border" />
+        <StatusRow
+          icon={<Bell size={22} />}
           label="アラーム"
           value="✓ 設定済み"
           ok

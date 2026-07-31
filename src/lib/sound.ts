@@ -1,3 +1,5 @@
+import type { WakeStyleId } from "./types";
+
 export type AlarmSoundId =
   | "radial"
   | "arpeggio"
@@ -73,7 +75,11 @@ type Tone = {
   detune?: number;
 };
 
-function playTone(ctx: AudioContext, t: Tone) {
+function playTone(
+  ctx: AudioContext,
+  t: Tone,
+  gainScale = 1
+) {
   const osc = ctx.createOscillator();
   const g = ctx.createGain();
   const start = ctx.currentTime + t.start;
@@ -81,7 +87,9 @@ function playTone(ctx: AudioContext, t: Tone) {
   osc.type = t.type ?? "sine";
   osc.frequency.value = t.freq;
   if (t.detune) osc.detune.value = t.detune;
-  const peak = t.gain ?? 0.22;
+
+  // 音割れを避けながら、起こし方に応じて全体の強さを変える
+  const peak = Math.min(0.42, (t.gain ?? 0.22) * gainScale);
   g.gain.setValueAtTime(0, start);
   g.gain.linearRampToValueAtTime(peak, start + 0.02);
   g.gain.exponentialRampToValueAtTime(0.0001, end);
@@ -234,29 +242,120 @@ function buildPattern(id: AlarmSoundId): { tones: Tone[]; cycle: number } {
   }
 }
 
+type WakeSoundProfile = {
+  gainScale: number;
+  cycleScale: number;
+  vibration: number | number[] | null;
+};
+
+function getWakeSoundProfile(
+  wakeStyleId: WakeStyleId,
+  elapsedSeconds: number
+): WakeSoundProfile {
+  if (wakeStyleId === "gentle") {
+    return {
+      gainScale: 0.52,
+      cycleScale: 1.2,
+      vibration: null,
+    };
+  }
+
+  if (wakeStyleId === "strong") {
+    if (elapsedSeconds < 8) {
+      return {
+        gainScale: 0.95,
+        cycleScale: 0.95,
+        vibration: [180, 80, 180],
+      };
+    }
+    if (elapsedSeconds < 16) {
+      return {
+        gainScale: 1.2,
+        cycleScale: 0.82,
+        vibration: [220, 70, 220],
+      };
+    }
+    return {
+      gainScale: 1.5,
+      cycleScale: 0.68,
+      vibration: [280, 60, 280, 60, 280],
+    };
+  }
+
+  if (elapsedSeconds < 10) {
+    return {
+      gainScale: 0.72,
+      cycleScale: 1.05,
+      vibration: null,
+    };
+  }
+  if (elapsedSeconds < 20) {
+    return {
+      gainScale: 0.92,
+      cycleScale: 0.95,
+      vibration: 180,
+    };
+  }
+  return {
+    gainScale: 1.15,
+    cycleScale: 0.82,
+    vibration: [220, 90, 220],
+  };
+}
+
 let loopTimer: ReturnType<typeof setTimeout> | null = null;
 let currentSoundId: AlarmSoundId | null = null;
+let alarmRunId = 0;
 
-export function playAlarm(soundId?: AlarmSoundId): void {
+export function playAlarm(
+  soundId?: AlarmSoundId,
+  wakeStyleId: WakeStyleId = "standard"
+): void {
   if (typeof window === "undefined") return;
+
   const id = soundId ?? getStoredAlarmSound();
   stopAlarm();
+
   currentSoundId = id;
+  const runId = ++alarmRunId;
+  const startedAt = performance.now();
   const { tones, cycle } = buildPattern(id);
   const ctx = getCtx();
+
   const playOnce = () => {
-    if (currentSoundId !== id) return;
-    for (const t of tones) playTone(ctx, t);
-    loopTimer = setTimeout(playOnce, cycle * 1000);
+    if (currentSoundId !== id || alarmRunId !== runId) return;
+
+    const elapsedSeconds = (performance.now() - startedAt) / 1000;
+    const profile = getWakeSoundProfile(wakeStyleId, elapsedSeconds);
+
+    for (const tone of tones) {
+      playTone(ctx, tone, profile.gainScale);
+    }
+
+    if (profile.vibration && "vibrate" in navigator) {
+      navigator.vibrate(profile.vibration);
+    }
+
+    loopTimer = setTimeout(
+      playOnce,
+      Math.max(450, cycle * 1000 * profile.cycleScale)
+    );
   };
+
   playOnce();
 }
 
 export function stopAlarm(): void {
   currentSoundId = null;
+  alarmRunId += 1;
+
   if (loopTimer) {
     clearTimeout(loopTimer);
     loopTimer = null;
+  }
+
+  if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+    navigator.vibrate(0);
   }
 }
 

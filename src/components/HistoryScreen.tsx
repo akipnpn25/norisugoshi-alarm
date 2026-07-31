@@ -7,6 +7,7 @@ import { Button } from "@/src/components/ui/button";
 import { Card } from "@/src/components/ui/card";
 import { supabase } from "@/src/lib/supabase";
 import { ensureAnonymousSession } from "@/src/lib/auth";
+import { WAKE_STYLES } from "@/src/lib/data";
 import type { AlarmHistoryRow } from "@/src/lib/types";
 import { formatDateTime, formatTime } from "@/src/lib/time";
 
@@ -15,6 +16,13 @@ const STATUS_LABEL: Record<string, string> = {
   fired: "鳴動済み",
   cancelled: "取り消し",
 };
+
+function wakeStyleLabel(id: AlarmHistoryRow["wake_style"]): string {
+  return (
+    WAKE_STYLES.find((style) => style.id === id)?.label ??
+    "しっかり"
+  );
+}
 
 export function HistoryScreen() {
   const [rows, setRows] = useState<AlarmHistoryRow[] | null>(null);
@@ -132,6 +140,11 @@ export function HistoryScreen() {
                   icon={<Clock size={14} />}
                   label="リード"
                   value={`${r.lead_time_minutes}分前`}
+                />
+                <Meta
+                  icon={<Bell size={14} />}
+                  label="起こし方"
+                  value={wakeStyleLabel(r.wake_style)}
                 />
                 <Meta
                   icon={<Headphones size={14} />}

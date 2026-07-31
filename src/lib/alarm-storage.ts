@@ -1,12 +1,15 @@
+import { DEFAULT_WAKE_STYLE_ID, WAKE_STYLES } from "./data";
 import type { AlarmConfig } from "./types";
 
 export const ACTIVE_ALARM_STORAGE_KEY =
   "norisugoshi_active_alarm";
 
 export interface StoredActiveAlarm {
+  mode?: AlarmConfig["mode"];
   station: AlarmConfig["station"];
   arrivalTime: string;
   leadTime: AlarmConfig["leadTime"];
+  wakeStyle?: AlarmConfig["wakeStyle"];
   alarmTime: string;
   demoMode: AlarmConfig["demoMode"];
   earphoneConnected: boolean;
@@ -20,9 +23,11 @@ export function saveActiveAlarm(
   if (typeof window === "undefined") return;
 
   const stored: StoredActiveAlarm = {
+    mode: config.mode,
     station: config.station,
     arrivalTime: config.arrivalTime.toISOString(),
     leadTime: config.leadTime,
+    wakeStyle: config.wakeStyle,
     alarmTime: config.alarmTime.toISOString(),
     demoMode: config.demoMode,
     earphoneConnected: config.earphoneConnected,
@@ -81,11 +86,17 @@ export function loadActiveAlarm(): {
       return null;
     }
 
+    const fallbackWakeStyle =
+      WAKE_STYLES.find((style) => style.id === DEFAULT_WAKE_STYLE_ID) ??
+      WAKE_STYLES[1];
+
     return {
       config: {
+        mode: stored.mode ?? "transit",
         station: stored.station,
         arrivalTime,
         leadTime: stored.leadTime,
+        wakeStyle: stored.wakeStyle ?? fallbackWakeStyle,
         alarmTime,
         demoMode: stored.demoMode,
         earphoneConnected: Boolean(

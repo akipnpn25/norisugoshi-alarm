@@ -4,6 +4,16 @@ export type Tab = "home" | "alarm" | "active" | "history" | "settings";
 
 export type Theme = "night" | "day";
 
+export type AlarmMode = "transit" | "break" | "nap";
+
+export type WakeStyleId = "gentle" | "standard" | "strong";
+
+export interface WakeStyleOption {
+  id: WakeStyleId;
+  label: string;
+  description: string;
+}
+
 export type LeadTimeId = "3min" | "5min" | "10min";
 
 export interface LeadTimeOption {
@@ -28,9 +38,11 @@ export interface DemoModeOption {
 }
 
 export interface AlarmConfig {
+  mode: AlarmMode;
   station: Station;
   arrivalTime: Date;
   leadTime: LeadTimeOption;
+  wakeStyle: WakeStyleOption;
   alarmTime: Date;
   demoMode: DemoModeOption;
   earphoneConnected: boolean;
@@ -40,6 +52,7 @@ export interface AlarmInput {
   station: Station | null;
   arrivalTime: Date;
   leadTimeId: string;
+  wakeStyleId: WakeStyleId;
 }
 
 export interface AudioRoute {
@@ -56,6 +69,7 @@ export interface AlarmHistoryRow {
   lead_time_minutes: number;
   demo_mode: string;
   earphone_connected: boolean;
+  wake_style: WakeStyleId | null;
   status: string;
   created_at: string;
 }
