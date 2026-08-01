@@ -60,13 +60,13 @@ export function HeadphoneCheckCard({
         <Headphones className="text-success" size={40} />
         <p className="mt-2 text-lg font-extrabold text-success">イヤホン接続中</p>
         <p className="mt-1 text-center text-[13px] text-muted-foreground">
-          イヤホンを通してアラームをお知らせします
+          接続中のイヤホンを優先してアラームを再生します
         </p>
         {routeName && (
           <p className="mt-2 text-xs text-muted-foreground">接続機器: {routeName}</p>
         )}
         <p className="mt-3 text-center text-xs text-muted-foreground">
-          実際にイヤホンから聞こえるか確認してください
+          試し音がイヤホンから聞こえることを確認してください
         </p>
 
         <div className="mt-3.5 flex gap-2">

@@ -387,14 +387,10 @@ export default function Home() {
 
   useEffect(() => {
     const unsubscribe = onAudioDeviceChange((route) => {
-      setEarphoneConnected((prevConnected) => {
-        if (!earphoneChecked) return prevConnected;
-        if (route.connected === prevConnected) {
-          return prevConnected;
-        }
-        if (route.connected) setRouteName(route.name);
-        return route.connected;
-      });
+      if (!earphoneChecked) return;
+
+      setEarphoneConnected(route.connected);
+      setRouteName(route.name);
     });
 
     return unsubscribe;

@@ -113,8 +113,8 @@ export function SettingsScreen({
       {/* 説明 */}
       <Card className="mt-6 bg-card px-5 py-4">
         <p className="text-[13px] leading-relaxed text-muted-foreground">
-          イヤホン接続中はイヤホンから、未接続時は本体スピーカーから再生されます。
-          アラーム音を試聴して、実際の出力先と音量を確認してください。
+          イヤホンを確認できた場合は、その出力先を優先します。
+          対応していないブラウザでは端末の音声出力設定に従うため、試し音で確認してください。
         </p>
       </Card>
     </div>

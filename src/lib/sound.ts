@@ -1,3 +1,4 @@
+import { getStoredAudioOutputDeviceId } from "./headphone";
 import type { WakeStyleId } from "./types";
 
 export type AlarmSoundId =
@@ -51,6 +52,70 @@ export function storeAlarmSound(id: AlarmSoundId): void {
 /* ===== Web Audio synthesis ===== */
 
 let audioCtx: AudioContext | null = null;
+
+type AudioContextWithSinkId = AudioContext & {
+  setSinkId?: (sinkId: string) => Promise<void>;
+  sinkId?: string;
+};
+
+let routedSinkId: string | null = null;
+
+async function prepareAudioOutput(
+  ctx: AudioContext
+): Promise<boolean> {
+  const preferredDeviceId =
+    getStoredAudioOutputDeviceId();
+  const sinkContext =
+    ctx as AudioContextWithSinkId;
+
+  if (!preferredDeviceId) {
+    if (
+      routedSinkId &&
+      sinkContext.setSinkId
+    ) {
+      try {
+        await sinkContext.setSinkId("");
+      } catch (error) {
+        console.warn(
+          "既定の音声出力への切り替えに失敗:",
+          error
+        );
+      }
+    }
+
+    routedSinkId = null;
+    return true;
+  }
+
+  // setSinkId 非対応ブラウザでは、OSが選んだ出力先に従う。
+  if (!sinkContext.setSinkId) {
+    return true;
+  }
+
+  if (
+    routedSinkId === preferredDeviceId ||
+    sinkContext.sinkId === preferredDeviceId
+  ) {
+    routedSinkId = preferredDeviceId;
+    return true;
+  }
+
+  try {
+    await sinkContext.setSinkId(
+      preferredDeviceId
+    );
+    routedSinkId = preferredDeviceId;
+    return true;
+  } catch (error) {
+    // イヤホン指定に失敗したときは、
+    // 本体スピーカーへ勝手にフォールバックしない。
+    console.warn(
+      "イヤホン出力の固定に失敗したため、音を再生しません:",
+      error
+    );
+    return false;
+  }
+}
 
 function getCtx(): AudioContext {
   if (!audioCtx) {
@@ -323,26 +388,73 @@ export function playAlarm(
   const ctx = getCtx();
 
   const playOnce = () => {
-    if (currentSoundId !== id || alarmRunId !== runId) return;
-
-    const elapsedSeconds = (performance.now() - startedAt) / 1000;
-    const profile = getWakeSoundProfile(wakeStyleId, elapsedSeconds);
-
-    for (const tone of tones) {
-      playTone(ctx, tone, profile.gainScale);
+    if (
+      currentSoundId !== id ||
+      alarmRunId !== runId
+    ) {
+      return;
     }
 
-    if (profile.vibration && "vibrate" in navigator) {
-      navigator.vibrate(profile.vibration);
+    const elapsedSeconds =
+      (performance.now() - startedAt) / 1000;
+    const profile = getWakeSoundProfile(
+      wakeStyleId,
+      elapsedSeconds
+    );
+
+    for (const tone of tones) {
+      playTone(
+        ctx,
+        tone,
+        profile.gainScale
+      );
+    }
+
+    if (
+      profile.vibration &&
+      "vibrate" in navigator
+    ) {
+      navigator.vibrate(
+        profile.vibration
+      );
     }
 
     loopTimer = setTimeout(
       playOnce,
-      Math.max(450, cycle * 1000 * profile.cycleScale)
+      Math.max(
+        450,
+        cycle *
+          1000 *
+          profile.cycleScale
+      )
     );
   };
 
-  playOnce();
+  void prepareAudioOutput(ctx).then(
+    (ready) => {
+      if (
+        currentSoundId !== id ||
+        alarmRunId !== runId
+      ) {
+        return;
+      }
+
+      if (!ready) {
+        if ("vibrate" in navigator) {
+          navigator.vibrate([
+            300,
+            100,
+            300,
+            100,
+            300,
+          ]);
+        }
+        return;
+      }
+
+      playOnce();
+    }
+  );
 }
 
 export function stopAlarm(): void {
@@ -380,21 +492,39 @@ export function playBreakWarning(): void {
     },
   ];
 
-  for (const tone of warningTones) {
-    playTone(ctx, tone, 0.7);
-  }
+  void prepareAudioOutput(ctx).then(
+    (ready) => {
+      if (!ready) return;
 
-  if ("vibrate" in navigator) {
-    navigator.vibrate(120);
-  }
+      for (const tone of warningTones) {
+        playTone(ctx, tone, 0.7);
+      }
+
+      if ("vibrate" in navigator) {
+        navigator.vibrate(120);
+      }
+    }
+  );
 }
 
 /** Play a short preview of a sound (one loop). */
-export function previewSound(id: AlarmSoundId): void {
+export function previewSound(
+  id: AlarmSoundId
+): void {
   if (typeof window === "undefined") return;
-  const { tones, cycle } = buildPattern(id);
+
+  const { tones } = buildPattern(id);
   const ctx = getCtx();
-  for (const t of tones) playTone(ctx, t);
+
+  void prepareAudioOutput(ctx).then(
+    (ready) => {
+      if (!ready) return;
+
+      for (const tone of tones) {
+        playTone(ctx, tone);
+      }
+    }
+  );
 }
 
 /* Legacy file-based API kept for compatibility but unused. */
