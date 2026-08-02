@@ -1,10 +1,23 @@
 "use client";
 
-import { Settings, Moon, Sun, Headphones, Volume2, Check, Play, Bookmark, ChevronRight } from "lucide-react";
+import {
+  Settings,
+  Moon,
+  Sun,
+  Headphones,
+  Volume2,
+  Check,
+  Play,
+  Bookmark,
+  ChevronRight,
+  Sparkles,
+  RotateCcw,
+} from "lucide-react";
 
 import { Card } from "@/src/components/ui/card";
 import { HeadphoneCheckCard } from "@/src/components/HeadphoneCheckCard";
 import type { Theme } from "@/src/lib/types";
+import type { AdaptiveAlarmPlan } from "@/src/lib/recommendation";
 import { ALARM_SOUNDS, type AlarmSoundId } from "@/src/lib/sound";
 
 interface SettingsScreenProps {
@@ -19,6 +32,12 @@ interface SettingsScreenProps {
   quickSettingNames: string[];
   recurringScheduleCount: number;
   onOpenMySettings: () => void;
+  adaptiveAlarmEnabled: boolean;
+  adaptiveAlarmPlan: AdaptiveAlarmPlan;
+  adaptivePlanLoading: boolean;
+  adaptiveHistorySince: string | null;
+  onToggleAdaptiveAlarm: (enabled: boolean) => void;
+  onResetAdaptiveAlarm: () => void;
 }
 
 export function SettingsScreen({
@@ -33,6 +52,12 @@ export function SettingsScreen({
   quickSettingNames,
   recurringScheduleCount,
   onOpenMySettings,
+  adaptiveAlarmEnabled,
+  adaptiveAlarmPlan,
+  adaptivePlanLoading,
+  adaptiveHistorySince,
+  onToggleAdaptiveAlarm,
+  onResetAdaptiveAlarm,
 }: SettingsScreenProps) {
   return (
     <div className="mx-auto min-h-full max-w-md px-5 pb-6 pt-4 animate-fade-in">
@@ -43,7 +68,7 @@ export function SettingsScreen({
           設定
         </h1>
         <p className="mt-1.5 text-sm text-muted-foreground">
-          保存設定・テーマ・アラーム音・出力先確認
+          保存設定・スマート調整・テーマ・アラーム音
         </p>
       </div>
 
@@ -77,6 +102,134 @@ export function SettingsScreen({
         </span>
         <ChevronRight size={18} className="shrink-0 text-moon" />
       </button>
+
+      {/* スマート調整 */}
+      <p className="mb-3 mt-6 flex items-center gap-1.5 text-base font-bold text-foreground">
+        <Sparkles size={18} className="text-moon" />
+        スマート調整
+      </p>
+      <Card className="bg-card px-4 py-4">
+        <div className="flex items-start gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-moon/15 text-moon">
+            <Sparkles size={20} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-base font-extrabold text-foreground">
+                  反応に合わせて自動調整
+                </p>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  過去の反応から、開始時刻と段階を強くする間隔を調整します。
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={adaptiveAlarmEnabled}
+                onClick={() =>
+                  onToggleAdaptiveAlarm(!adaptiveAlarmEnabled)
+                }
+                className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
+                  adaptiveAlarmEnabled
+                    ? "bg-moon"
+                    : "bg-muted"
+                }`}
+              >
+                <span
+                  className={`absolute left-0 top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+                    adaptiveAlarmEnabled
+                      ? "translate-x-6"
+                      : "translate-x-1"
+                  }`}
+                />
+                <span className="sr-only">
+                  スマート調整を
+                  {adaptiveAlarmEnabled ? "オフ" : "オン"}にする
+                </span>
+              </button>
+            </div>
+
+            <div className="mt-4 rounded-2xl bg-night-surface/50 px-3.5 py-3">
+              {!adaptiveAlarmEnabled ? (
+                <>
+                  <p className="text-sm font-extrabold text-foreground">
+                    現在はオフ
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    開始時刻は変更せず、30秒後・90秒後に段階的に強くします。
+                  </p>
+                </>
+              ) : adaptivePlanLoading ? (
+                <p className="text-xs text-muted-foreground">
+                  過去の反応を確認しています。
+                </p>
+              ) : adaptiveAlarmPlan.personalized ? (
+                <>
+                  <p className="text-sm font-extrabold text-foreground">
+                    過去{adaptiveAlarmPlan.sampleCount}回の反応を使用中
+                  </p>
+                  <div className="mt-2 space-y-1 text-xs leading-relaxed text-muted-foreground">
+                    <p>
+                      反応時間の目安：
+                      {Math.round(
+                        (adaptiveAlarmPlan.medianReactionMs ?? 0) /
+                          1000
+                      )}
+                      秒
+                    </p>
+                    <p>
+                      開始時刻：
+                      {adaptiveAlarmPlan.extraLeadMinutes > 0
+                        ? `${adaptiveAlarmPlan.extraLeadMinutes}分早める`
+                        : "変更なし"}
+                    </p>
+                    <p>
+                      段階強化：
+                      {Math.round(
+                        adaptiveAlarmPlan.stageTwoDelayMs / 1000
+                      )}
+                      秒後・
+                      {Math.round(
+                        adaptiveAlarmPlan.stageThreeDelayMs / 1000
+                      )}
+                      秒後
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-extrabold text-foreground">
+                    学習中 {adaptiveAlarmPlan.sampleCount}/3回
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    3回たまるまでは、開始時刻を変えず30秒後・90秒後に強くします。
+                  </p>
+                </>
+              )}
+            </div>
+
+            {adaptiveHistorySince && (
+              <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                前回のリセット以降の記録だけを学習に使っています。
+              </p>
+            )}
+
+            <button
+              type="button"
+              onClick={onResetAdaptiveAlarm}
+              disabled={adaptivePlanLoading}
+              className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-xs font-bold text-muted-foreground transition-colors hover:bg-night-surface disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <RotateCcw size={14} />
+              スマート調整をリセット
+            </button>
+            <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+              履歴画面の記録は削除せず、これまでの記録をスマート調整の計算から外します。
+            </p>
+          </div>
+        </div>
+      </Card>
 
       {/* テーマ */}
       <p className="mb-3 mt-6 text-base font-bold text-foreground">テーマ</p>

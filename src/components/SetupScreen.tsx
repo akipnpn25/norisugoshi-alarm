@@ -49,6 +49,7 @@ interface SetupScreenProps {
   onApplyQuickSetting: (setting: TransitQuickSetting) => void;
   adaptiveAlarmPlan: AdaptiveAlarmPlan;
   adaptivePlanLoading: boolean;
+  adaptiveAlarmEnabled: boolean;
   onSetAlarm: () => void;
   onHeadphoneCheckStart?: () => void;
   onHeadphoneCheckEnd: (connected: boolean, name: string, error: string | null) => void;
@@ -67,6 +68,7 @@ export function SetupScreen({
   onApplyQuickSetting,
   adaptiveAlarmPlan,
   adaptivePlanLoading,
+  adaptiveAlarmEnabled,
   onSetAlarm,
   onHeadphoneCheckStart,
   onHeadphoneCheckEnd,
@@ -239,7 +241,12 @@ export function SetupScreen({
             <p className="text-sm font-extrabold text-foreground">
               スマート調整
             </p>
-            {adaptivePlanLoading ? (
+            {!adaptiveAlarmEnabled ? (
+              <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
+                オフです。反応がない場合は、標準の30秒後・90秒後に
+                段階的に強くします。
+              </p>
+            ) : adaptivePlanLoading ? (
               <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
                 過去の反応を確認しています。
               </p>

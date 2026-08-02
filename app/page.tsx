@@ -17,6 +17,13 @@ import { SetupScreen } from "@/src/components/SetupScreen";
 import { TabBar } from "@/src/components/TabBar";
 import { ensureAnonymousSession } from "@/src/lib/auth";
 import {
+  createResetAdaptiveAlarmSettings,
+  DEFAULT_ADAPTIVE_ALARM_SETTINGS,
+  loadAdaptiveAlarmSettings,
+  saveAdaptiveAlarmSettings,
+  type AdaptiveAlarmSettings,
+} from "@/src/lib/adaptive-alarm-settings";
+import {
   clearActiveAlarm,
   loadActiveAlarm,
   saveActiveAlarm,
@@ -514,6 +521,10 @@ export default function Home() {
     );
   const [adaptivePlanLoading, setAdaptivePlanLoading] =
     useState(true);
+  const [adaptiveAlarmSettings, setAdaptiveAlarmSettings] =
+    useState<AdaptiveAlarmSettings>(
+      DEFAULT_ADAPTIVE_ALARM_SETTINGS
+    );
 
   const timerRef =
     useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -562,45 +573,73 @@ export default function Home() {
     clearAlarmStageTimers();
   };
 
-  const refreshAdaptiveAlarmPlan = useCallback(async () => {
-    setAdaptivePlanLoading(true);
+  const refreshAdaptiveAlarmPlan = useCallback(
+    async (settingsOverride?: AdaptiveAlarmSettings) => {
+      const settings =
+        settingsOverride ?? loadAdaptiveAlarmSettings();
 
-    try {
-      await ensureAnonymousSession();
+      if (!settings.enabled) {
+        setAdaptiveAlarmPlan(
+          DEFAULT_ADAPTIVE_ALARM_PLAN
+        );
+        setAdaptivePlanLoading(false);
+        return;
+      }
 
-      const { data, error } = await supabase
-        .from("alarm_history")
-        .select("*")
-        .eq("mode", "transit")
-        .eq("demo_mode", "normal")
-        .order("created_at", { ascending: false })
-        .limit(20);
+      setAdaptivePlanLoading(true);
 
-      if (error) throw error;
+      try {
+        await ensureAnonymousSession();
 
-      setAdaptiveAlarmPlan(
-        buildAdaptiveAlarmPlan(
-          (data ?? []) as AlarmHistoryRow[]
-        )
-      );
-    } catch (error) {
-      console.warn(
-        "スマート調整用の履歴読み込みに失敗:",
-        error
-      );
-      setAdaptiveAlarmPlan(
-        DEFAULT_ADAPTIVE_ALARM_PLAN
-      );
-    } finally {
-      setAdaptivePlanLoading(false);
-    }
-  }, []);
+        let query = supabase
+          .from("alarm_history")
+          .select("*")
+          .eq("mode", "transit")
+          .eq("demo_mode", "normal")
+          .order("created_at", { ascending: false })
+          .limit(20);
+
+        if (settings.historySince) {
+          query = query.gte(
+            "created_at",
+            settings.historySince
+          );
+        }
+
+        const { data, error } = await query;
+
+        if (error) throw error;
+
+        setAdaptiveAlarmPlan(
+          buildAdaptiveAlarmPlan(
+            (data ?? []) as AlarmHistoryRow[]
+          )
+        );
+      } catch (error) {
+        console.warn(
+          "スマート調整用の履歴読み込みに失敗:",
+          error
+        );
+        setAdaptiveAlarmPlan(
+          DEFAULT_ADAPTIVE_ALARM_PLAN
+        );
+      } finally {
+        setAdaptivePlanLoading(false);
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     setAlarmSoundId(getStoredAlarmSound());
     setPendingWakeStyles(getPendingWakeStyles());
     setRecurringSchedules(loadRecurringSchedules());
     setQuickSettings(loadQuickSettings());
+    const storedAdaptiveAlarmSettings =
+      loadAdaptiveAlarmSettings();
+    setAdaptiveAlarmSettings(
+      storedAdaptiveAlarmSettings
+    );
     setSchedulesReady(true);
     setInput((prev) => ({
       ...prev,
@@ -611,7 +650,9 @@ export default function Home() {
       wakeStyleId: getStoredWakeStyle("break"),
     }));
     loadAlarmSound();
-    void refreshAdaptiveAlarmPlan();
+    void refreshAdaptiveAlarmPlan(
+      storedAdaptiveAlarmSettings
+    );
 
     return () => {
       releaseAlarmSound();
@@ -1650,6 +1691,48 @@ const handleToggleTodaySkip = (
     previewSound(id);
   };
 
+  const handleToggleAdaptiveAlarm = (enabled: boolean) => {
+    const nextSettings: AdaptiveAlarmSettings = {
+      ...adaptiveAlarmSettings,
+      enabled,
+    };
+
+    setAdaptiveAlarmSettings(nextSettings);
+    saveAdaptiveAlarmSettings(nextSettings);
+
+    if (enabled) {
+      void refreshAdaptiveAlarmPlan(nextSettings);
+      return;
+    }
+
+    setAdaptivePlanLoading(false);
+    setAdaptiveAlarmPlan(
+      DEFAULT_ADAPTIVE_ALARM_PLAN
+    );
+  };
+
+  const handleResetAdaptiveAlarm = () => {
+    if (typeof window !== "undefined") {
+      const confirmed = window.confirm(
+        "これまでの履歴をスマート調整の学習対象から外します。履歴画面の記録は削除されません。リセットしますか？"
+      );
+
+      if (!confirmed) return;
+    }
+
+    const nextSettings =
+      createResetAdaptiveAlarmSettings(
+        adaptiveAlarmSettings
+      );
+
+    setAdaptiveAlarmSettings(nextSettings);
+    saveAdaptiveAlarmSettings(nextSettings);
+    setAdaptiveAlarmPlan(
+      DEFAULT_ADAPTIVE_ALARM_PLAN
+    );
+    void refreshAdaptiveAlarmPlan(nextSettings);
+  };
+
   const alarmSoundLabel =
     ALARM_SOUNDS.find(
       (sound) => sound.id === alarmSoundId
@@ -1817,6 +1900,9 @@ const handleToggleTodaySkip = (
                       adaptivePlanLoading={
                         adaptivePlanLoading
                       }
+                      adaptiveAlarmEnabled={
+                        adaptiveAlarmSettings.enabled
+                      }
                       onSetAlarm={
                         handleSetRealAlarm
                       }
@@ -1913,6 +1999,20 @@ const handleToggleTodaySkip = (
                   recurringScheduleCount={recurringSchedules.length}
                   onOpenMySettings={() =>
                     setShowSchedules(true)
+                  }
+                  adaptiveAlarmEnabled={
+                    adaptiveAlarmSettings.enabled
+                  }
+                  adaptiveAlarmPlan={adaptiveAlarmPlan}
+                  adaptivePlanLoading={adaptivePlanLoading}
+                  adaptiveHistorySince={
+                    adaptiveAlarmSettings.historySince
+                  }
+                  onToggleAdaptiveAlarm={
+                    handleToggleAdaptiveAlarm
+                  }
+                  onResetAdaptiveAlarm={
+                    handleResetAdaptiveAlarm
                   }
                 />
               ))}
