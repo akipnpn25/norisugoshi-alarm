@@ -5,27 +5,6 @@ import type {
   WakeStyleOption,
 } from "./types";
 
-export const STATIONS: Station[] = [
-  { id: "shinjuku", name: "新宿駅", kana: "しんじゅくえき" },
-  { id: "shibuya", name: "渋谷駅", kana: "しぶやえき" },
-  { id: "tokyo", name: "東京駅", kana: "とうきょうえき" },
-  { id: "ikebukuro", name: "池袋駅", kana: "いけぶくろえき" },
-  { id: "shinagawa", name: "品川駅", kana: "しながわえき" },
-  { id: "shinbashi", name: "新橋駅", kana: "しんばしえき" },
-  { id: "yurakucho", name: "有楽町駅", kana: "ゆうらくちょうえき" },
-  { id: "akihabara", name: "秋葉原駅", kana: "あきはばらえき" },
-  { id: "ueno", name: "上野駅", kana: "うえのえき" },
-  { id: "kanda", name: "神田駅", kana: "かんだえき" },
-  { id: "tokyo-stn", name: "東京タワー前", kana: "とうきょうたわーまえ" },
-  { id: "hamamatsucho", name: "浜松町駅", kana: "はままつちょうえき" },
-  { id: "tamachi", name: "田町駅", kana: "たまちえき" },
-  { id: "ebisu", name: "恵比寿駅", kana: "えびすえき" },
-  { id: "meguro", name: "目黒駅", kana: "めぐろえき" },
-  { id: "gotanda", name: "五反田駅", kana: "ごたんだえき" },
-  { id: "osaki", name: "大崎駅", kana: "おおさきえき" },
-  { id: "kamata", name: "蒲田駅", kana: "かまたえき" },
-];
-
 export const LEAD_TIMES: LeadTimeOption[] = [
   { id: "3min", label: "3分前", minutesBefore: 3 },
   { id: "5min", label: "5分前", minutesBefore: 5 },
@@ -63,6 +42,12 @@ export const BREAK_STATION: Station = {
   id: "break",
   name: "休憩",
   kana: "きゅうけい",
+};
+
+export const TRANSIT_ARRIVAL_LEAD_TIME: LeadTimeOption = {
+  id: "0min",
+  label: "到着時刻",
+  minutesBefore: 0,
 };
 
 export const BREAK_END_LEAD_TIME: LeadTimeOption = {

@@ -18,6 +18,8 @@ export interface StoredActiveAlarm {
   breakWarningEnabled?: boolean;
   alarmFiredAt?: string;
   firstInteractionAt?: string;
+  activeWakeStyle?: AlarmConfig["activeWakeStyle"];
+  alarmStage?: AlarmConfig["alarmStage"];
   historyId: string;
 }
 
@@ -42,6 +44,8 @@ export function saveActiveAlarm(
     alarmFiredAt: config.alarmFiredAt?.toISOString(),
     firstInteractionAt:
       config.firstInteractionAt?.toISOString(),
+    activeWakeStyle: config.activeWakeStyle,
+    alarmStage: config.alarmStage,
     historyId,
   };
 
@@ -114,6 +118,19 @@ export function loadActiveAlarm(): {
         Number.isNaN(alarmFiredAt.getTime())) ||
       (firstInteractionAt &&
         Number.isNaN(firstInteractionAt.getTime()));
+    const alarmStage =
+      stored.alarmStage === 1 ||
+      stored.alarmStage === 2 ||
+      stored.alarmStage === 3
+        ? stored.alarmStage
+        : undefined;
+    const activeWakeStyle =
+      stored.activeWakeStyle
+        ? WAKE_STYLES.find(
+            (style) =>
+              style.id === stored.activeWakeStyle?.id
+          )
+        : undefined;
 
     if (invalidBase || invalidBreak || invalidTiming) {
       clearActiveAlarm();
@@ -141,6 +158,8 @@ export function loadActiveAlarm(): {
         breakWarningEnabled: Boolean(stored.breakWarningEnabled),
         alarmFiredAt,
         firstInteractionAt,
+        activeWakeStyle,
+        alarmStage,
       },
       historyId: stored.historyId,
     };

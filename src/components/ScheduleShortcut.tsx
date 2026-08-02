@@ -49,7 +49,7 @@ export function ScheduleShortcut({
 
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-extrabold text-foreground">
-            繰り返し予定
+            繰り返し設定
           </span>
           <span className="mt-0.5 block truncate text-xs text-muted-foreground">
             {nextOccurrence
@@ -58,7 +58,7 @@ export function ScheduleShortcut({
                   now
                 )}`
               : enabledCount > 0
-                ? "今日の予定はありません"
+                ? "今日の設定はありません"
                 : "毎日・平日・曜日指定で登録"}
           </span>
         </span>

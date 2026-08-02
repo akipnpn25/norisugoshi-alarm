@@ -280,3 +280,155 @@ export function TimeWheelPicker({
     </div>
   );
 }
+
+
+interface DurationWheelPickerProps {
+  durationMinutes: number;
+  onComplete: (durationMinutes: number) => void;
+}
+
+function formatDurationLabel(totalMinutes: number): string {
+  const safeMinutes = Math.max(1, Math.min(240, totalMinutes));
+  const hours = Math.floor(safeMinutes / 60);
+  const minutes = safeMinutes % 60;
+
+  if (hours === 0) {
+    return `${minutes}分`;
+  }
+
+  if (minutes === 0) {
+    return `${hours}時間`;
+  }
+
+  return `${hours}時間${minutes}分`;
+}
+
+export function DurationWheelPicker({
+  durationMinutes,
+  onComplete,
+}: DurationWheelPickerProps) {
+  const normalizedMinutes = Math.max(
+    1,
+    Math.min(240, durationMinutes)
+  );
+  const initialHour = Math.floor(normalizedMinutes / 60);
+  const initialMinute = normalizedMinutes % 60;
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [draftHour, setDraftHour] = useState(initialHour);
+  const [draftMinute, setDraftMinute] = useState(initialMinute);
+
+  const openEditor = () => {
+    const safeMinutes = Math.max(
+      1,
+      Math.min(240, durationMinutes)
+    );
+    setDraftHour(Math.floor(safeMinutes / 60));
+    setDraftMinute(safeMinutes % 60);
+    setIsEditing(true);
+  };
+
+  const minuteValues = draftHour === 4 ? [0] : range(60);
+  const selectedMinutes = draftHour * 60 + draftMinute;
+  const canCommit =
+    selectedMinutes >= 1 && selectedMinutes <= 240;
+
+  const commit = () => {
+    if (!canCommit) return;
+    onComplete(selectedMinutes);
+    setIsEditing(false);
+  };
+
+  if (!isEditing) {
+    return (
+      <button
+        type="button"
+        onClick={openEditor}
+        className="group flex w-full items-center justify-between rounded-3xl border border-border bg-card px-5 py-4 transition-all hover:bg-night-surface active:scale-[0.99]"
+      >
+        <div className="flex items-center gap-3">
+          <Clock className="text-moon-dim" size={22} />
+          <div className="text-left">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+              所要時間
+            </p>
+            <p className="mt-1 text-2xl font-extrabold tabular-nums text-moon">
+              {formatDurationLabel(normalizedMinutes)}
+            </p>
+          </div>
+        </div>
+        <span className="flex items-center gap-1.5 rounded-full bg-night-surface px-3 py-1.5 text-[12px] font-bold text-muted-foreground transition-colors group-hover:text-foreground">
+          <Pencil size={13} />
+          変更
+        </span>
+      </button>
+    );
+  }
+
+  return (
+    <div className="animate-scale-in rounded-3xl border border-moon/30 bg-night-card p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-sm font-bold text-foreground">
+          所要時間を設定
+        </span>
+        <button
+          type="button"
+          onClick={() => setIsEditing(false)}
+          className="rounded-full px-3 py-1 text-[13px] font-bold text-muted-foreground transition-colors hover:text-foreground"
+        >
+          キャンセル
+        </button>
+      </div>
+
+      <div className="flex items-stretch gap-2 rounded-2xl bg-night-deep/50 p-2">
+        <div className="flex flex-1 items-stretch">
+          <WheelColumn
+            values={range(5)}
+            selected={draftHour}
+            onChange={(hour) => {
+              setDraftHour(hour);
+              if (hour === 4) {
+                setDraftMinute(0);
+              }
+            }}
+            format={(hour) => String(hour)}
+          />
+          <div className="flex items-center px-1 text-sm font-extrabold text-moon-dim">
+            時間
+          </div>
+        </div>
+
+        <div className="flex flex-1 items-stretch">
+          <WheelColumn
+            values={minuteValues}
+            selected={draftMinute}
+            onChange={setDraftMinute}
+            format={pad2}
+          />
+          <div className="flex items-center px-1 text-sm font-extrabold text-moon-dim">
+            分
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3 flex items-center justify-center gap-2 text-sm">
+        <span className="text-muted-foreground">設定後:</span>
+        <span className="text-lg font-extrabold tabular-nums text-moon">
+          {selectedMinutes === 0
+            ? "1分以上を選択"
+            : formatDurationLabel(selectedMinutes)}
+        </span>
+      </div>
+
+      <button
+        type="button"
+        onClick={commit}
+        disabled={!canCommit}
+        className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-moon py-3.5 text-base font-extrabold text-night-deep transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <Check size={20} strokeWidth={3} />
+        完了
+      </button>
+    </div>
+  );
+}

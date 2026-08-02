@@ -1,6 +1,6 @@
 "use client";
 
-import { Settings, Moon, Sun, Headphones, Volume2, Check, Play } from "lucide-react";
+import { Settings, Moon, Sun, Headphones, Volume2, Check, Play, Bookmark, ChevronRight } from "lucide-react";
 
 import { Card } from "@/src/components/ui/card";
 import { HeadphoneCheckCard } from "@/src/components/HeadphoneCheckCard";
@@ -16,6 +16,9 @@ interface SettingsScreenProps {
   onHeadphoneCheckEnd: (connected: boolean, name: string, error: string | null) => void;
   alarmSoundId: AlarmSoundId;
   onSelectAlarmSound: (id: AlarmSoundId) => void;
+  quickSettingNames: string[];
+  recurringScheduleCount: number;
+  onOpenMySettings: () => void;
 }
 
 export function SettingsScreen({
@@ -27,6 +30,9 @@ export function SettingsScreen({
   onHeadphoneCheckEnd,
   alarmSoundId,
   onSelectAlarmSound,
+  quickSettingNames,
+  recurringScheduleCount,
+  onOpenMySettings,
 }: SettingsScreenProps) {
   return (
     <div className="mx-auto min-h-full max-w-md px-5 pb-6 pt-4 animate-fade-in">
@@ -37,12 +43,43 @@ export function SettingsScreen({
           設定
         </h1>
         <p className="mt-1.5 text-sm text-muted-foreground">
-          テーマ・アラーム音・出力先確認
+          保存設定・テーマ・アラーム音・出力先確認
         </p>
       </div>
 
+      {/* マイ設定 */}
+      <p className="mb-3 text-base font-bold text-foreground flex items-center gap-1.5">
+        <Bookmark size={18} className="text-moon" />
+        マイ設定・繰り返し設定
+      </p>
+      <button
+        type="button"
+        onClick={onOpenMySettings}
+        className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card px-4 py-4 text-left transition-colors hover:bg-night-surface active:scale-[0.99]"
+      >
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-moon/15 text-moon">
+          <Bookmark size={20} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-base font-extrabold text-foreground">
+            保存設定を管理
+          </span>
+          <span className="mt-1 block truncate text-xs text-muted-foreground">
+            {quickSettingNames.length > 0
+              ? quickSettingNames.slice(0, 3).join("・")
+              : "マイ設定は手動、繰り返し設定は曜日で自動"}
+          </span>
+          {recurringScheduleCount > 0 && (
+            <span className="mt-1 block text-[11px] font-bold text-moon">
+              繰り返し設定 {recurringScheduleCount}件
+            </span>
+          )}
+        </span>
+        <ChevronRight size={18} className="shrink-0 text-moon" />
+      </button>
+
       {/* テーマ */}
-      <p className="mb-3 text-base font-bold text-foreground">テーマ</p>
+      <p className="mb-3 mt-6 text-base font-bold text-foreground">テーマ</p>
       <button
         onClick={onToggleTheme}
         className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card px-4 py-4 transition-colors hover:bg-night-surface"

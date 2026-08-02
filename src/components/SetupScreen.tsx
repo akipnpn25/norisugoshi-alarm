@@ -1,15 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { createPortal } from "react-dom";
 import {
   Moon,
-  MapPin,
+  Bookmark,
   Clock,
   Bell,
-  Plus,
-  Search,
-  X,
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
@@ -18,13 +14,16 @@ import { Button } from "@/src/components/ui/button";
 import { Card } from "@/src/components/ui/card";
 import { HeadphoneCheckCard } from "@/src/components/HeadphoneCheckCard";
 import { TimeWheelPicker } from "@/src/components/TimeWheelPicker";
-import { LEAD_TIMES, WAKE_STYLES } from "@/src/lib/data";
+import {
+  LEAD_TIMES,
+  TRANSIT_ARRIVAL_LEAD_TIME,
+  WAKE_STYLES,
+} from "@/src/lib/data";
 import type {
   AlarmInput,
-  Station,
+  TransitQuickSetting,
   WakeStyleId,
 } from "@/src/lib/types";
-import type { StationRow } from "@/src/lib/stations";
 import {
   calculateAlarmTime,
   formatTime,
@@ -39,12 +38,13 @@ interface SetupScreenProps {
   earphoneChecked: boolean;
   earphoneConnected: boolean;
   routeName: string;
-  stations: StationRow[];
+  alarmSoundLabel: string;
+  quickSettings: TransitQuickSetting[];
+  selectedQuickSettingId: string | null;
+  onApplyQuickSetting: (setting: TransitQuickSetting) => void;
   onSetAlarm: () => void;
   onHeadphoneCheckStart?: () => void;
   onHeadphoneCheckEnd: (connected: boolean, name: string, error: string | null) => void;
-  onSelectStation: (s: Station) => void;
-  onAddStation: (name: string) => Promise<void>;
 }
 
 export function SetupScreen({
@@ -54,18 +54,23 @@ export function SetupScreen({
   earphoneChecked,
   earphoneConnected,
   routeName,
-  stations,
+  alarmSoundLabel,
+  quickSettings,
+  selectedQuickSettingId,
+  onApplyQuickSetting,
   onSetAlarm,
   onHeadphoneCheckStart,
   onHeadphoneCheckEnd,
-  onSelectStation,
-  onAddStation,
 }: SetupScreenProps) {
-  const [adding, setAdding] = useState(false);
-  const [stationName, setStationName] = useState("");
   const [choosingWakeStyle, setChoosingWakeStyle] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const availableLeadTimes =
+    input.leadTimeId === TRANSIT_ARRIVAL_LEAD_TIME.id
+      ? [TRANSIT_ARRIVAL_LEAD_TIME, ...LEAD_TIMES]
+      : LEAD_TIMES;
   const leadTime =
-    LEAD_TIMES.find((l) => l.id === input.leadTimeId) ?? LEAD_TIMES[1];
+    availableLeadTimes.find((l) => l.id === input.leadTimeId) ??
+    LEAD_TIMES[1];
   const alarmTime = calculateAlarmTime(input.arrivalTime, leadTime);
   const wakeStyle =
     WAKE_STYLES.find((style) => style.id === input.wakeStyleId) ??
@@ -82,9 +87,8 @@ export function SetupScreen({
     input.arrivalTime.getMonth() === tomorrow.getMonth() &&
     input.arrivalTime.getDate() === tomorrow.getDate();
 
-  const ready =
-    input.station !== null &&
-    isFuture(alarmTime);
+  const ready = isFuture(alarmTime);
+  const destinationName = input.station?.name.trim() ?? "";
 
   return (
     <div className="mx-auto min-h-screen max-w-md px-5 pb-24 pt-4 animate-fade-in">
@@ -99,64 +103,70 @@ export function SetupScreen({
         </p>
       </div>
 
-      {/* 1. 目的地 */}
-      <div className="mb-3 mt-6 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-[26px] w-[26px] items-center justify-center rounded-full bg-moon text-[13px] font-extrabold text-night-deep">
-            1
+      {/* いつもの移動 */}
+      {quickSettings.length > 0 && (
+        <section className="mt-6">
+          <div className="mb-3 flex items-center gap-2 text-base font-bold text-foreground">
+            <Bookmark size={17} className="text-moon" />
+            マイ設定
           </div>
-          <span className="flex items-center gap-1.5 text-base font-bold text-foreground">
-            <MapPin size={16} />
-            目的地を選ぶ
-          </span>
-        </div>
-        <button
-          onClick={() => setAdding(true)}
-          className="flex items-center gap-1.5 rounded-full bg-moon/15 px-3.5 py-2 text-[13px] font-extrabold text-moon transition-all hover:bg-moon/25 active:scale-95"
-        >
-          <Plus size={15} strokeWidth={3} />
-          駅を追加
-        </button>
-      </div>
-      <div className="-mx-5 flex gap-2.5 overflow-x-auto px-5 pb-2 scrollbar-hide">
-        {stations.map((s) => {
-          const selected = input.station?.id === s.id;
-          return (
-            <button
-              key={s.id}
-              onClick={() => onSelectStation(s)}
-              className={`shrink-0 rounded-2xl border px-5 py-3.5 text-[15px] font-bold transition-all active:scale-95 ${
-                selected
-                  ? "border-moon bg-moon text-night-deep"
-                  : "border-border bg-card text-foreground hover:bg-night-surface"
-              }`}
-            >
-              {s.name}
-            </button>
-          );
-        })}
-      </div>
+          <div className="-mx-5 flex gap-2.5 overflow-x-auto px-5 pb-2 scrollbar-hide">
+            {quickSettings.map((setting) => {
+              const selected = setting.id === selectedQuickSettingId;
 
-      {/* 駅追加モーダル */}
-      {adding && (
-        <StationAddModal
-          value={stationName}
-          onChange={setStationName}
-          onClose={() => {
-            setAdding(false);
-            setStationName("");
-          }}
-          onAdd={async () => {
-            if (!stationName.trim()) return;
-            await onAddStation(stationName);
-            setAdding(false);
-            setStationName("");
-          }}
-        />
+              return (
+                <button
+                  key={setting.id}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => onApplyQuickSetting(setting)}
+                  className={`min-w-[150px] shrink-0 rounded-2xl border px-4 py-3.5 text-left transition-all active:scale-[0.98] ${
+                    selected
+                      ? "border-moon bg-moon shadow-lg shadow-moon/20 ring-2 ring-moon/30"
+                      : "border-moon/30 bg-moon/10"
+                  }`}
+                >
+                  <span
+                    className={`block truncate text-[15px] font-extrabold ${
+                      selected ? "text-night-deep" : "text-foreground"
+                    }`}
+                  >
+                    {setting.name}
+                  </span>
+                  {setting.station.name.trim() && (
+                    <span
+                      className={`mt-1 block truncate text-xs font-bold ${
+                        selected ? "text-night-deep/80" : "text-moon"
+                      }`}
+                    >
+                      {setting.station.name}
+                    </span>
+                  )}
+                  <span
+                    className={`mt-1 block text-[11px] ${
+                      selected
+                        ? "font-bold text-night-deep/70"
+                        : "text-muted-foreground"
+                    }`}
+                  >
+                    {String(setting.arrivalHour).padStart(2, "0")}:{String(
+                      setting.arrivalMinute
+                    ).padStart(2, "0")}到着用
+                  </span>
+                  {selected && (
+                    <span className="mt-2 inline-flex rounded-full bg-night-deep/15 px-2 py-1 text-[10px] font-extrabold text-night-deep">
+                      {isArrivalTomorrow ? "明日の設定を適用中" : "選択中"}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </section>
       )}
 
-      {/* 2. 到着予定時刻 */}
-      <SectionLabel num="2" text="到着予定時刻" icon={<Clock size={16} />} />
+      {/* 1. 到着予定時刻 */}
+      <SectionLabel num="1" text="到着予定時刻" icon={<Clock size={16} />} />
       <TimeWheelPicker
         hour={input.arrivalTime.getHours()}
         minute={input.arrivalTime.getMinutes()}
@@ -181,10 +191,10 @@ export function SetupScreen({
         </p>
       )}
 
-      {/* 3. 起こすタイミング */}
-      <SectionLabel num="3" text="起こすタイミング" icon={<Bell size={16} />} />
+      {/* 2. 起こすタイミング */}
+      <SectionLabel num="2" text="起こすタイミング" icon={<Bell size={16} />} />
       <div className="flex gap-2.5">
-        {LEAD_TIMES.map((l) => {
+        {availableLeadTimes.map((l) => {
           const selected = l.id === input.leadTimeId;
           return (
             <button
@@ -202,26 +212,34 @@ export function SetupScreen({
         })}
       </div>
 
-      {/* 4. 起こし方 */}
-      <SectionLabel num="4" text="起こし方" icon={<Bell size={16} />} />
+      {/* 3. 詳細設定 */}
+      <SectionLabel num="3" text="詳細設定" icon={<Bell size={16} />} />
       <Card className="bg-card p-0">
         <button
           type="button"
-          onClick={() => setChoosingWakeStyle((open) => !open)}
+          onClick={() => setDetailsOpen((open) => !open)}
           className="flex w-full items-center gap-3 px-4 py-4 text-left"
-          aria-expanded={choosingWakeStyle}
+          aria-expanded={detailsOpen}
         >
           <span className="flex-1">
             <span className="block text-base font-extrabold text-foreground">
-              {wakeStyle.label}
+              起こし方：{wakeStyle.label}
             </span>
             <span className="mt-1 block text-[12px] text-muted-foreground">
-              {wakeStyle.description}
+              アラーム音：{alarmSoundLabel}
+            </span>
+            <span className="mt-1 block text-[12px] text-muted-foreground">
+              音の出力先：
+              {!earphoneChecked
+                ? "未確認"
+                : earphoneConnected
+                  ? routeName || "イヤホン"
+                  : routeName || "本体スピーカー"}
             </span>
           </span>
           <span className="flex items-center gap-1 text-[12px] font-bold text-moon">
-            変更
-            {choosingWakeStyle ? (
+            {detailsOpen ? "閉じる" : "確認・変更"}
+            {detailsOpen ? (
               <ChevronUp size={16} />
             ) : (
               <ChevronDown size={16} />
@@ -229,59 +247,89 @@ export function SetupScreen({
           </span>
         </button>
 
-        {choosingWakeStyle && (
-          <div className="border-t border-border px-3 pb-3 pt-2">
-            {WAKE_STYLES.map((style) => {
-              const selected = style.id === input.wakeStyleId;
-              return (
-                <button
-                  key={style.id}
-                  type="button"
-                  onClick={() => {
-                    onWakeStyleChange(style.id);
-                    setChoosingWakeStyle(false);
-                  }}
-                  className={`mt-2 w-full rounded-2xl border px-4 py-3 text-left transition-all active:scale-[0.99] ${
-                    selected
-                      ? "border-moon bg-moon/15"
-                      : "border-border bg-night-surface/50"
-                  }`}
-                >
-                  <span className="flex items-center justify-between gap-3">
-                    <span>
-                      <span className="block text-[15px] font-extrabold text-foreground">
-                        {style.label}
+        {detailsOpen && (
+          <div className="border-t border-border px-3 pb-4 pt-3">
+            <p className="px-1 text-sm font-extrabold text-foreground">
+              起こし方
+            </p>
+            <button
+              type="button"
+              onClick={() => setChoosingWakeStyle((open) => !open)}
+              className="mt-2 flex w-full items-center gap-3 rounded-2xl border border-border bg-night-surface/40 px-4 py-3 text-left"
+              aria-expanded={choosingWakeStyle}
+            >
+              <span className="flex-1">
+                <span className="block text-[15px] font-extrabold text-foreground">
+                  {wakeStyle.label}
+                </span>
+                <span className="mt-1 block text-[12px] text-muted-foreground">
+                  {wakeStyle.description}
+                </span>
+              </span>
+              {choosingWakeStyle ? (
+                <ChevronUp size={16} className="text-moon" />
+              ) : (
+                <ChevronDown size={16} className="text-moon" />
+              )}
+            </button>
+
+            {choosingWakeStyle && (
+              <div className="pb-1">
+                {WAKE_STYLES.map((style) => {
+                  const selected = style.id === input.wakeStyleId;
+                  return (
+                    <button
+                      key={style.id}
+                      type="button"
+                      onClick={() => {
+                        onWakeStyleChange(style.id);
+                        setChoosingWakeStyle(false);
+                      }}
+                      className={`mt-2 w-full rounded-2xl border px-4 py-3 text-left transition-all active:scale-[0.99] ${
+                        selected
+                          ? "border-moon bg-moon/15"
+                          : "border-border bg-night-surface/50"
+                      }`}
+                    >
+                      <span className="flex items-center justify-between gap-3">
+                        <span>
+                          <span className="block text-[15px] font-extrabold text-foreground">
+                            {style.label}
+                          </span>
+                          <span className="mt-1 block text-[12px] text-muted-foreground">
+                            {style.description}
+                          </span>
+                        </span>
+                        {selected && (
+                          <span className="shrink-0 text-xs font-bold text-moon">
+                            選択中
+                          </span>
+                        )}
                       </span>
-                      <span className="mt-1 block text-[12px] text-muted-foreground">
-                        {style.description}
-                      </span>
-                    </span>
-                    {selected && (
-                      <span className="shrink-0 text-xs font-bold text-moon">
-                        選択中
-                      </span>
-                    )}
-                  </span>
-                </button>
-              );
-            })}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            <p className="mt-2 px-1 text-xs text-muted-foreground">
+              前回選んだ起こし方を次回も自動で使用します。
+            </p>
+
+            <div className="my-4 h-px bg-border" />
+            <p className="mb-2 px-1 text-sm font-extrabold text-foreground">
+              音の出力先を確認（任意）
+            </p>
+            <HeadphoneCheckCard
+              checked={earphoneChecked}
+              connected={earphoneConnected}
+              routeName={routeName}
+              onCheckStart={onHeadphoneCheckStart}
+              onCheckEnd={onHeadphoneCheckEnd}
+            />
           </div>
         )}
       </Card>
-
-      <p className="mt-2 text-xs text-muted-foreground">
-        前回選んだ起こし方を次回も自動で使用します。
-      </p>
-
-      {/* 5. 音の出力先 */}
-      <SectionLabel num="5" text="音の出力先を確認（任意）" icon={<Bell size={16} />} />
-      <HeadphoneCheckCard
-        checked={earphoneChecked}
-        connected={earphoneConnected}
-        routeName={routeName}
-        onCheckStart={onHeadphoneCheckStart}
-        onCheckEnd={onHeadphoneCheckEnd}
-      />
 
       <Card className="mt-3 border-moon/30 bg-moon/10 px-4 py-3">
         <p className="text-[13px] leading-relaxed text-muted-foreground">
@@ -291,8 +339,8 @@ export function SetupScreen({
         </p>
       </Card>
 
-      {/* 6. 計算された起床時刻（概要） */}
-      <SectionLabel num="6" text="起床時刻" />
+      {/* 4. 計算された起床時刻（概要） */}
+      <SectionLabel num="4" text="起床時刻" />
       <Card className="bg-card">
         <div className="flex items-center justify-between">
           <span className="text-sm text-muted-foreground">起床時刻</span>
@@ -300,13 +348,17 @@ export function SetupScreen({
             {formatTimeWithDay(alarmTime)}
           </span>
         </div>
-        <div className="my-3.5 h-px bg-border" />
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-muted-foreground">目的地</span>
-          <span className="font-bold text-foreground">
-            {input.station?.name ?? "未選択"}
-          </span>
-        </div>
+        {destinationName && (
+          <>
+            <div className="my-3.5 h-px bg-border" />
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">目的地</span>
+              <span className="font-bold text-foreground">
+                {destinationName}
+              </span>
+            </div>
+          </>
+        )}
       </Card>
 
       {isLongWait && (
@@ -326,9 +378,7 @@ export function SetupScreen({
       </Button>
       {!ready && (
         <p className="mt-3 text-center text-xs text-muted-foreground">
-          {!input.station
-            ? "目的地を選んでください"
-            : "起床時刻が過ぎています。到着時刻か起こすタイミングを変更してください"}
+          起床時刻が過ぎています。到着時刻か起こすタイミングを変更してください
         </p>
       )}
     </div>
@@ -354,67 +404,5 @@ function SectionLabel({
         {text}
       </span>
     </div>
-  );
-}
-
-function StationAddModal({
-  value,
-  onChange,
-  onClose,
-  onAdd,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  onClose: () => void;
-  onAdd: () => void;
-}) {
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto overscroll-contain bg-night-deep/80 px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-[calc(env(safe-area-inset-top)+1.25rem)] backdrop-blur-md animate-fade-in"
-      onClick={onClose}
-    >
-      <div
-        className="max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2.5rem)] w-full max-w-md overflow-y-auto rounded-3xl border border-moon/30 bg-night-card p-5 shadow-2xl animate-scale-in sm:p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-extrabold text-foreground">駅を追加</h3>
-          <button
-            onClick={onClose}
-            className="rounded-full p-1.5 text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <X size={20} />
-          </button>
-        </div>
-
-        <div className="relative">
-          <Search
-            size={18}
-            className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground"
-          />
-          <input
-            type="text"
-            autoFocus
-            value={value}
-            placeholder="駅名・目的地を入力"
-            onChange={(e) => onChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") onAdd();
-            }}
-            className="w-full rounded-2xl border border-border bg-night-deep/60 py-4 pl-11 pr-4 text-base text-foreground outline-none placeholder:text-muted-foreground focus:border-moon"
-          />
-        </div>
-
-        <button
-          onClick={onAdd}
-          disabled={!value.trim()}
-          className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-moon py-3.5 text-base font-extrabold text-night-deep transition-all active:scale-[0.98] disabled:opacity-40"
-        >
-          <Plus size={20} strokeWidth={3} />
-          追加する
-        </button>
-      </div>
-    </div>,
-    document.body
   );
 }

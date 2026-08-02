@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import {
   ArrowLeft,
   Bell,
+  Bookmark,
   CalendarClock,
   Check,
   Clock,
@@ -13,6 +14,7 @@ import {
   Pencil,
   Plus,
   Power,
+  Volume2,
   SkipForward,
   Trash2,
   TrainFront,
@@ -21,7 +23,10 @@ import {
 
 import { Button } from "@/src/components/ui/button";
 import { Card } from "@/src/components/ui/card";
-import { TimeWheelPicker } from "@/src/components/TimeWheelPicker";
+import {
+  DurationWheelPicker,
+  TimeWheelPicker,
+} from "@/src/components/TimeWheelPicker";
 import {
   BREAK_DURATION_OPTIONS,
   DEFAULT_WAKE_STYLE_ID,
@@ -34,14 +39,18 @@ import {
   isScheduleNormallyForDate,
   toLocalDateKey,
 } from "@/src/lib/schedule-storage";
+import { ALARM_SOUNDS } from "@/src/lib/sound";
 import { formatTimeWithDay } from "@/src/lib/time";
 import type {
+  AlarmSoundId,
   BreakRecurringSchedule,
   LeadTimeId,
+  QuickSetting,
   RecurringSchedule,
   RepeatPattern,
   SetupMode,
   Station,
+  TransitQuickSetting,
   TransitRecurringSchedule,
   WakeStyleId,
   Weekday,
@@ -63,12 +72,15 @@ interface BreakScheduleDefaults {
 
 interface ScheduleScreenProps {
   schedules: RecurringSchedule[];
-  stations: Station[];
+  quickSettings: QuickSetting[];
   defaultMode: SetupMode;
   transitDefaults: TransitScheduleDefaults;
   breakDefaults: BreakScheduleDefaults;
+  alarmSoundId: AlarmSoundId;
   onSave: (schedule: RecurringSchedule) => void;
+  onSaveQuickSetting: (setting: QuickSetting) => void;
   onDelete: (scheduleId: string) => void;
+  onDeleteQuickSetting: (settingId: string) => void;
   onToggleEnabled: (scheduleId: string) => void;
   onToggleTodaySkip: (scheduleId: string) => void;
   onClose: () => void;
@@ -80,14 +92,28 @@ interface ScheduleDraft {
   enabled: boolean;
   repeatPattern: RepeatPattern;
   weekdays: Weekday[];
-  stationId: string;
+  destination: string;
   arrivalTime: string;
   leadTimeId: LeadTimeId;
   startTime: string;
   durationMinutes: string;
   warningEnabled: boolean;
   wakeStyleId: WakeStyleId;
+  alarmSoundId: AlarmSoundId;
   skippedDates: string[];
+  createdAt: string | null;
+}
+
+interface QuickSettingDraft {
+  id: string | null;
+  name: string;
+  mode: SetupMode;
+  destination: string;
+  arrivalTime: string;
+  leadTimeId: LeadTimeId;
+  warningEnabled: boolean;
+  wakeStyleId: WakeStyleId;
+  alarmSoundId: AlarmSoundId;
   createdAt: string | null;
 }
 
@@ -136,6 +162,17 @@ function parseTimeValue(value: string): {
   return { hour, minute };
 }
 
+function createDestinationStation(
+  destination: string,
+  idPrefix: string
+): Station {
+  return {
+    id: `${idPrefix}-${crypto.randomUUID()}`,
+    name: destination,
+    kana: "",
+  };
+}
+
 function getWeekdaysForPattern(
   repeatPattern: RepeatPattern,
   weekdays: Weekday[]
@@ -155,18 +192,24 @@ function getWeekdaysForPattern(
 
 export function ScheduleScreen({
   schedules,
-  stations,
+  quickSettings,
   defaultMode,
   transitDefaults,
   breakDefaults,
+  alarmSoundId,
   onSave,
+  onSaveQuickSetting,
   onDelete,
+  onDeleteQuickSetting,
   onToggleEnabled,
   onToggleTodaySkip,
   onClose,
 }: ScheduleScreenProps) {
   const [editing, setEditing] =
     useState<ScheduleDraft | null>(null);
+  const [editingQuick, setEditingQuick] =
+    useState<QuickSettingDraft | null>(null);
+  const [choosingUsage, setChoosingUsage] = useState(false);
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -175,29 +218,89 @@ export function ScheduleScreen({
   }, []);
 
   const todayKey = toLocalDateKey(now);
+  const transitQuickSettings = useMemo(
+    () =>
+      quickSettings.filter(
+        (setting): setting is TransitQuickSetting =>
+          setting.mode === "transit"
+      ),
+    [quickSettings]
+  );
 
-  const stationOptions = useMemo(() => {
-    const map = new Map<string, Station>();
-
-    stations.forEach((station) =>
-      map.set(station.id, station)
-    );
-
-    schedules.forEach((schedule) => {
-      if (schedule.mode === "transit") {
-        map.set(schedule.station.id, schedule.station);
-      }
+  const openNewQuickSetting = () => {
+    setEditingQuick({
+      id: null,
+      name: "",
+      mode: "transit",
+      destination: transitDefaults.station?.name ?? "",
+      arrivalTime: toTimeValue(
+        transitDefaults.arrivalHour,
+        transitDefaults.arrivalMinute
+      ),
+      leadTimeId: transitDefaults.leadTimeId,
+      warningEnabled: breakDefaults.warningEnabled,
+      wakeStyleId: transitDefaults.wakeStyleId,
+      alarmSoundId,
+      createdAt: null,
     });
+  };
 
-    if (transitDefaults.station) {
-      map.set(
-        transitDefaults.station.id,
-        transitDefaults.station
-      );
+  const openExistingQuickSetting = (
+    setting: TransitQuickSetting
+  ) => {
+    setEditingQuick({
+      id: setting.id,
+      name: setting.name,
+      mode: "transit",
+      destination: setting.station.name,
+      arrivalTime: toTimeValue(
+        setting.arrivalHour,
+        setting.arrivalMinute
+      ),
+      leadTimeId: setting.leadTimeId,
+      warningEnabled: false,
+      wakeStyleId: setting.wakeStyleId,
+      alarmSoundId: setting.alarmSoundId,
+      createdAt: setting.createdAt,
+    });
+  };
+
+  const saveQuickDraft = (draft: QuickSettingDraft) => {
+    const arrival = parseTimeValue(draft.arrivalTime);
+    const name = draft.name.trim();
+    const destination = draft.destination.trim();
+
+    if (!name || !arrival) {
+      return;
     }
 
-    return Array.from(map.values());
-  }, [schedules, stations, transitDefaults.station]);
+    const timestamp = new Date().toISOString();
+    const base = {
+      id: draft.id ?? crypto.randomUUID(),
+      name,
+      wakeStyleId: draft.wakeStyleId,
+      alarmSoundId: draft.alarmSoundId,
+      createdAt: draft.createdAt ?? timestamp,
+      updatedAt: timestamp,
+    };
+
+    const station = createDestinationStation(
+      destination,
+      destination ? "quick-destination" : "quick-no-destination"
+    );
+
+    const setting: TransitQuickSetting = {
+      ...base,
+      mode: "transit",
+      station,
+      arrivalHour: arrival.hour,
+      arrivalMinute: arrival.minute,
+      leadTimeId: draft.leadTimeId,
+    };
+
+    onSaveQuickSetting(setting);
+    setEditingQuick(null);
+  };
 
   const openNewSchedule = () => {
     const nowForTime = new Date();
@@ -210,10 +313,7 @@ export function ScheduleScreen({
       enabled: true,
       repeatPattern: "weekdays",
       weekdays: [...DEFAULT_CUSTOM_WEEKDAYS],
-      stationId:
-        transitDefaults.station?.id ??
-        stationOptions[0]?.id ??
-        "",
+      destination: transitDefaults.station?.name ?? "",
       arrivalTime: toTimeValue(
         transitDefaults.arrivalHour,
         transitDefaults.arrivalMinute
@@ -232,6 +332,7 @@ export function ScheduleScreen({
           ? breakDefaults.wakeStyleId
           : transitDefaults.wakeStyleId,
       skippedDates: [],
+      alarmSoundId,
       createdAt: null,
     });
   };
@@ -245,12 +346,10 @@ export function ScheduleScreen({
       enabled: schedule.enabled,
       repeatPattern: schedule.repeatPattern,
       weekdays: [...schedule.weekdays],
-      stationId:
+      destination:
         schedule.mode === "transit"
-          ? schedule.station.id
-          : transitDefaults.station?.id ??
-            stationOptions[0]?.id ??
-            "",
+          ? schedule.station.name
+          : transitDefaults.station?.name ?? "",
       arrivalTime:
         schedule.mode === "transit"
           ? toTimeValue(
@@ -285,6 +384,7 @@ export function ScheduleScreen({
           : breakDefaults.warningEnabled,
       wakeStyleId: schedule.wakeStyleId,
       skippedDates: [...schedule.skippedDates],
+      alarmSoundId: schedule.alarmSoundId,
       createdAt: schedule.createdAt,
     });
   };
@@ -300,19 +400,23 @@ export function ScheduleScreen({
         draft.weekdays
       ),
       skippedDates: draft.skippedDates,
+      alarmSoundId: draft.alarmSoundId,
       createdAt: draft.createdAt ?? timestamp,
       updatedAt: timestamp,
     };
 
     if (draft.mode === "transit") {
-      const station = stationOptions.find(
-        (item) => item.id === draft.stationId
-      );
+      const destination = draft.destination.trim();
       const arrival = parseTimeValue(
         draft.arrivalTime
       );
 
-      if (!station || !arrival) return;
+      if (!arrival) return;
+
+      const station = createDestinationStation(
+        destination,
+        destination ? "schedule-destination" : "schedule-no-destination"
+      );
 
       const schedule: TransitRecurringSchedule = {
         ...base,
@@ -377,30 +481,141 @@ export function ScheduleScreen({
               className="text-moon"
               size={27}
             />
-            繰り返し予定
+            設定の管理
           </h1>
           <p className="mt-1.5 text-sm text-muted-foreground">
-            毎日・平日・曜日ごとの設定を登録できます。
+            自分で呼び出す「マイ設定」と、曜日で動く「繰り返し設定」を管理します。
           </p>
         </div>
       </div>
 
       <Button
         type="button"
-        onClick={openNewSchedule}
+        onClick={() => setChoosingUsage(true)}
         className="mt-5 w-full"
       >
-        <Plus size={19} className="mr-2" />
-        新しい予定を追加
+        <Plus size={18} className="mr-2" />
+        新しい設定を追加
       </Button>
 
-      <Card className="mt-4 border-moon/30 bg-moon/10 px-4 py-3">
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          Web版では、画面を閉じたり端末をロックしたりすると、
-          予定時刻に自動実行されない場合があります。予定一覧を
-          確認し、利用中はアプリを開いたままにしてください。
-        </p>
-      </Card>
+      <section className="mt-6">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="flex items-center gap-2 text-base font-extrabold text-foreground">
+              <Bookmark size={18} className="text-moon" />
+              マイ設定
+            </h2>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              必要な日に、電車画面のボタンを自分で押して呼び出します。自動では始まりません。
+            </p>
+          </div>
+          <span className="rounded-full bg-moon/10 px-2.5 py-1 text-xs font-bold text-moon">
+            {transitQuickSettings.length}件
+          </span>
+        </div>
+
+        {transitQuickSettings.length === 0 ? (
+          <Card className="mt-3 border-dashed px-4 py-5 text-center">
+            <p className="text-sm font-extrabold text-foreground">
+              マイ設定はまだありません
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              大学・自宅など、よく使う到着時刻や起こし方を登録できます。
+            </p>
+          </Card>
+        ) : (
+          <div className="mt-3 flex flex-col gap-3">
+            {transitQuickSettings.map((setting) => {
+              const leadTime = LEAD_TIMES.find(
+                (item) => item.id === setting.leadTimeId
+              );
+              const wakeStyle = WAKE_STYLES.find(
+                (style) => style.id === setting.wakeStyleId
+              );
+
+              return (
+                <Card key={setting.id} className="p-4">
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-moon/15 text-moon">
+                      <TrainFront size={21} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-base font-extrabold text-foreground">
+                        {setting.name}
+                      </p>
+                      <p className="mt-1 text-xs font-bold text-moon">
+                        {`${
+                          setting.station.name.trim()
+                            ? `${setting.station.name}・`
+                            : ""
+                        }到着 ${toTimeValue(
+                          setting.arrivalHour,
+                          setting.arrivalMinute
+                        )}・${leadTime?.label ?? "5分前"}`}
+                      </p>
+                      <span className="mt-2 inline-flex rounded-full bg-night-surface px-2.5 py-1 text-[11px] font-bold text-muted-foreground">
+                        {wakeStyle?.label ?? "しっかり"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        openExistingQuickSetting(setting)
+                      }
+                      className="flex items-center justify-center gap-1.5 rounded-xl border border-border px-3 py-2.5 text-xs font-bold text-muted-foreground transition-all active:scale-[0.98]"
+                    >
+                      <Pencil size={15} />
+                      編集
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const ok = window.confirm(
+                          "このマイ設定を削除しますか？"
+                        );
+                        if (ok) {
+                          onDeleteQuickSetting(setting.id);
+                        }
+                      }}
+                      className="flex items-center justify-center gap-1.5 rounded-xl border border-destructive/30 px-3 py-2.5 text-xs font-bold text-destructive transition-all active:scale-[0.98]"
+                    >
+                      <Trash2 size={15} />
+                      削除
+                    </button>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <section className="mt-8">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="flex items-center gap-2 text-base font-extrabold text-foreground">
+              <CalendarClock size={18} className="text-moon" />
+              繰り返し設定
+            </h2>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              曜日と到着・開始時刻を決めると、アプリを開いている間に自動で開始します。
+            </p>
+          </div>
+          <span className="rounded-full bg-moon/10 px-2.5 py-1 text-xs font-bold text-moon">
+            {schedules.length}件
+          </span>
+        </div>
+
+        <Card className="mt-3 border-moon/30 bg-moon/10 px-4 py-3">
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Web版では、画面を閉じたり端末をロックしたりすると、
+            予定時刻に自動実行されない場合があります。利用中は
+            アプリを開いたままにしてください。
+          </p>
+        </Card>
 
       {schedules.length === 0 ? (
         <div className="flex flex-col items-center py-16 text-center">
@@ -412,7 +627,7 @@ export function ScheduleScreen({
           </p>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
             よく使う電車や休憩の設定を、
-            繰り返し予定として登録できます。
+            繰り返し設定として登録できます。
           </p>
         </div>
       ) : (
@@ -582,7 +797,7 @@ export function ScheduleScreen({
                     type="button"
                     onClick={() => {
                       const ok = window.confirm(
-                        "この繰り返し予定を削除しますか？"
+                        "この繰り返し設定を削除しますか？"
                       );
 
                       if (ok) {
@@ -600,14 +815,37 @@ export function ScheduleScreen({
           })}
         </div>
       )}
+      </section>
+
+      {choosingUsage && (
+        <UsageChoiceModal
+          onClose={() => setChoosingUsage(false)}
+          onChooseQuick={() => {
+            setChoosingUsage(false);
+            openNewQuickSetting();
+          }}
+          onChooseRecurring={() => {
+            setChoosingUsage(false);
+            openNewSchedule();
+          }}
+        />
+      )}
 
       {editing && (
         <ScheduleEditorModal
           draft={editing}
-          stations={stationOptions}
           onChange={setEditing}
           onClose={() => setEditing(null)}
           onSave={() => saveDraft(editing)}
+        />
+      )}
+
+      {editingQuick && (
+        <QuickSettingEditorModal
+          draft={editingQuick}
+          onChange={setEditingQuick}
+          onClose={() => setEditingQuick(null)}
+          onSave={() => saveQuickDraft(editingQuick)}
         />
       )}
     </div>
@@ -616,13 +854,11 @@ export function ScheduleScreen({
 
 function ScheduleEditorModal({
   draft,
-  stations,
   onChange,
   onClose,
   onSave,
 }: {
   draft: ScheduleDraft;
-  stations: Station[];
   onChange: (draft: ScheduleDraft) => void;
   onClose: () => void;
   onSave: () => void;
@@ -640,10 +876,7 @@ function ScheduleEditorModal({
     draft.weekdays.length > 0;
   const modeValid =
     draft.mode === "transit"
-      ? Boolean(
-          draft.stationId &&
-            parseTimeValue(draft.arrivalTime)
-        )
+      ? Boolean(parseTimeValue(draft.arrivalTime))
       : Boolean(
           parseTimeValue(draft.startTime) &&
             validDuration
@@ -694,25 +927,6 @@ function ScheduleEditorModal({
           >
             <X size={20} />
           </button>
-        </div>
-
-        <EditorLabel
-          text="種類"
-          icon={<CalendarClock size={16} />}
-        />
-        <div className="grid grid-cols-2 gap-2">
-          <ModeButton
-            selected={draft.mode === "transit"}
-            icon={<TrainFront size={18} />}
-            label="電車"
-            onClick={() => setMode("transit")}
-          />
-          <ModeButton
-            selected={draft.mode === "break"}
-            icon={<Coffee size={18} />}
-            label="休憩"
-            onClick={() => setMode("break")}
-          />
         </div>
 
         <EditorLabel
@@ -790,29 +1004,22 @@ function ScheduleEditorModal({
         {draft.mode === "transit" ? (
           <>
             <EditorLabel
-              text="目的地"
+              text="目的地（任意）"
               icon={<MapPin size={16} />}
             />
-            <select
-              value={draft.stationId}
+            <input
+              type="text"
+              value={draft.destination}
+              maxLength={40}
+              placeholder="例：新宿駅、大学"
               onChange={(event) =>
                 onChange({
                   ...draft,
-                  stationId: event.target.value,
+                  destination: event.target.value,
                 })
               }
-              className="w-full rounded-2xl border border-border bg-night-deep/60 px-4 py-3.5 text-base font-bold text-foreground outline-none focus:border-moon"
-            >
-              <option value="">目的地を選択</option>
-              {stations.map((station) => (
-                <option
-                  key={station.id}
-                  value={station.id}
-                >
-                  {station.name}
-                </option>
-              ))}
-            </select>
+              className="w-full rounded-2xl border border-border bg-night-deep/60 px-4 py-3.5 text-base font-bold text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-moon"
+            />
 
             <EditorLabel
               text="到着予定時刻"
@@ -1046,6 +1253,44 @@ function ScheduleEditorModal({
           ))}
         </div>
 
+        <EditorLabel
+          text="アラーム音"
+          icon={<Volume2 size={16} />}
+        />
+        <div className="grid grid-cols-1 gap-2">
+          {ALARM_SOUNDS.map((sound) => (
+            <button
+              key={sound.id}
+              type="button"
+              onClick={() =>
+                onChange({
+                  ...draft,
+                  alarmSoundId: sound.id,
+                })
+              }
+              className={`rounded-2xl border px-4 py-3 text-left transition-all active:scale-[0.99] ${
+                draft.alarmSoundId === sound.id
+                  ? "border-moon bg-moon/15"
+                  : "border-border bg-card"
+              }`}
+            >
+              <span className="flex items-center justify-between gap-3">
+                <span>
+                  <span className="block text-sm font-extrabold text-foreground">
+                    {sound.label}
+                  </span>
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    {sound.description}
+                  </span>
+                </span>
+                {draft.alarmSoundId === sound.id && (
+                  <Check size={18} className="shrink-0 text-moon" />
+                )}
+              </span>
+            </button>
+          ))}
+        </div>
+
         <div className="mt-6 grid grid-cols-2 gap-3">
           <Button
             type="button"
@@ -1062,6 +1307,310 @@ function ScheduleEditorModal({
             保存
           </Button>
         </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+function QuickSettingEditorModal({
+  draft,
+  onChange,
+  onClose,
+  onSave,
+}: {
+  draft: QuickSettingDraft;
+  onChange: (draft: QuickSettingDraft) => void;
+  onClose: () => void;
+  onSave: () => void;
+}) {
+  const arrival = parseTimeValue(draft.arrivalTime);
+  const valid =
+    Boolean(draft.name.trim()) &&
+    Boolean(arrival);
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto overscroll-contain bg-night-deep/80 px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-[calc(env(safe-area-inset-top)+1.25rem)] backdrop-blur-md animate-fade-in"
+      onClick={onClose}
+      role="presentation"
+    >
+      <div
+        className="max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-2.5rem)] w-full max-w-md overflow-y-auto rounded-3xl border border-moon/30 bg-night-card p-5 shadow-2xl animate-scale-in sm:p-6"
+        onClick={(event) => event.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="quick-setting-editor-title"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2
+              id="quick-setting-editor-title"
+              className="text-xl font-extrabold text-foreground"
+            >
+              {draft.id
+                ? "マイ設定を編集"
+                : "マイ設定を追加"}
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              保存した到着時刻を、必要な日に電車画面から呼び出します。
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-1.5 text-muted-foreground transition-colors hover:text-foreground"
+            aria-label="閉じる"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        <EditorLabel
+          text="設定名"
+          icon={<Bookmark size={16} />}
+        />
+        <input
+          type="text"
+          value={draft.name}
+          maxLength={20}
+          placeholder="例：大学、自宅"
+          onChange={(event) =>
+            onChange({
+              ...draft,
+              name: event.target.value,
+            })
+          }
+          className="w-full rounded-2xl border border-border bg-night-deep/60 px-4 py-3.5 text-base font-bold text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-moon"
+        />
+
+        <EditorLabel
+          text="目的地（任意）"
+          icon={<MapPin size={16} />}
+        />
+        <input
+          type="text"
+          value={draft.destination}
+          maxLength={40}
+          placeholder="例：鷹の台駅、津田塾大学"
+          onChange={(event) =>
+            onChange({
+              ...draft,
+              destination: event.target.value,
+            })
+          }
+          className="w-full rounded-2xl border border-border bg-night-deep/60 px-4 py-3.5 text-base font-bold text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-moon"
+        />
+
+        <EditorLabel
+          text="到着予定時刻"
+          icon={<Clock size={16} />}
+        />
+        <TimeWheelPicker
+          hour={arrival?.hour ?? 0}
+          minute={arrival?.minute ?? 0}
+          onComplete={(hour, minute) =>
+            onChange({
+              ...draft,
+              arrivalTime: toTimeValue(hour, minute),
+            })
+          }
+        />
+        <p className="mt-2 text-center text-xs leading-relaxed text-muted-foreground">
+          この時刻に到着する日のための設定として保存します。
+        </p>
+
+        <EditorLabel
+          text="起こすタイミング"
+          icon={<Bell size={16} />}
+        />
+            <div className="grid grid-cols-3 gap-2">
+              {LEAD_TIMES.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() =>
+                    onChange({
+                      ...draft,
+                      leadTimeId: item.id,
+                    })
+                  }
+                  className={`rounded-2xl border px-2 py-3 text-sm font-extrabold transition-all active:scale-95 ${
+                    draft.leadTimeId === item.id
+                      ? "border-moon bg-moon text-night-deep"
+                      : "border-border bg-card text-foreground"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+
+        <EditorLabel
+          text="起こし方"
+          icon={<Bell size={16} />}
+        />
+        <div className="flex flex-col gap-2">
+          {WAKE_STYLES.map((style) => (
+            <button
+              key={style.id}
+              type="button"
+              onClick={() =>
+                onChange({
+                  ...draft,
+                  wakeStyleId: style.id,
+                })
+              }
+              className={`rounded-2xl border px-4 py-3 text-left transition-all active:scale-[0.99] ${
+                draft.wakeStyleId === style.id
+                  ? "border-moon bg-moon/15"
+                  : "border-border bg-card"
+              }`}
+            >
+              <span className="flex items-center justify-between gap-3">
+                <span>
+                  <span className="block text-sm font-extrabold text-foreground">
+                    {style.label}
+                  </span>
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    {style.description}
+                  </span>
+                </span>
+                {draft.wakeStyleId === style.id && (
+                  <Check
+                    size={18}
+                    className="shrink-0 text-moon"
+                  />
+                )}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <EditorLabel
+          text="アラーム音"
+          icon={<Volume2 size={16} />}
+        />
+        <div className="grid grid-cols-1 gap-2">
+          {ALARM_SOUNDS.map((sound) => (
+            <button
+              key={sound.id}
+              type="button"
+              onClick={() =>
+                onChange({
+                  ...draft,
+                  alarmSoundId: sound.id,
+                })
+              }
+              className={`rounded-2xl border px-4 py-3 text-left transition-all active:scale-[0.99] ${
+                draft.alarmSoundId === sound.id
+                  ? "border-moon bg-moon/15"
+                  : "border-border bg-card"
+              }`}
+            >
+              <span className="flex items-center justify-between gap-3">
+                <span>
+                  <span className="block text-sm font-extrabold text-foreground">
+                    {sound.label}
+                  </span>
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    {sound.description}
+                  </span>
+                </span>
+                {draft.alarmSoundId === sound.id && (
+                  <Check size={18} className="shrink-0 text-moon" />
+                )}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-6 grid grid-cols-2 gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+          >
+            キャンセル
+          </Button>
+          <Button
+            type="button"
+            disabled={!valid}
+            onClick={onSave}
+          >
+            保存
+          </Button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+function UsageChoiceModal({
+  onClose,
+  onChooseQuick,
+  onChooseRecurring,
+}: {
+  onClose: () => void;
+  onChooseQuick: () => void;
+  onChooseRecurring: () => void;
+}) {
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-night-deep/80 px-4 backdrop-blur-md animate-fade-in"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md rounded-3xl border border-moon/30 bg-night-card p-5 shadow-2xl animate-scale-in"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-extrabold text-foreground">
+              利用方法を選ぶ
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              「自分で呼び出す」か「曜日で自動実行する」かを選びます。
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-1.5 text-muted-foreground"
+            aria-label="閉じる"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={onChooseQuick}
+          className="mt-5 w-full rounded-2xl border border-moon/40 bg-moon/10 px-4 py-4 text-left transition-all active:scale-[0.99]"
+        >
+          <span className="flex items-center gap-2 text-base font-extrabold text-foreground">
+            <Bookmark size={19} className="text-moon" />
+            マイ設定
+          </span>
+          <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+            必要な日に、自分でボタンを押して呼び出します。
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={onChooseRecurring}
+          className="mt-3 w-full rounded-2xl border border-border bg-card px-4 py-4 text-left transition-all active:scale-[0.99]"
+        >
+          <span className="flex items-center gap-2 text-base font-extrabold text-foreground">
+            <CalendarClock size={19} className="text-moon" />
+            繰り返し設定
+          </span>
+          <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+            曜日を決めると、アプリを開いている間に自動で開始します。
+          </span>
+        </button>
       </div>
     </div>,
     document.body

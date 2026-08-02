@@ -41,6 +41,10 @@ export function AlarmScreen({
     Boolean(config.firstInteractionAt)
   );
   const isBreak = config.mode === "break";
+  const destinationName = config.station.name.trim();
+  const activeWakeStyle =
+    config.activeWakeStyle ?? config.wakeStyle;
+  const alarmStage = config.alarmStage ?? 1;
 
   useEffect(() => {
     const id = setInterval(
@@ -78,7 +82,7 @@ export function AlarmScreen({
     observer.observe(track);
 
     return () => observer.disconnect();
-  }, []);
+  }, [activeWakeStyle.id]);
 
   const recordFirstInteraction = () => {
     if (interactionRecordedRef.current) return;
@@ -235,15 +239,26 @@ export function AlarmScreen({
       </div>
 
       <p className="mb-2 rounded-full bg-moon/15 px-3 py-1.5 text-xs font-extrabold text-moon">
-        {config.wakeStyle.label}
+        {activeWakeStyle.label}
       </p>
+      {!isBreak && (
+        <p className="mb-3 text-xs font-bold text-muted-foreground">
+          {alarmStage === 1
+            ? "1段階目"
+            : alarmStage === 2
+              ? "2段階目・強化中"
+              : "最終段階・再通知"}
+        </p>
+      )}
       <h2 className="text-center text-3xl font-extrabold text-moon">
         {isBreak ? "休憩終了です" : "おはよう！"}
       </h2>
       <p className="mt-3.5 text-center text-2xl font-extrabold text-foreground">
         {isBreak
           ? "休憩時間が終わりました"
-          : `まもなく${config.station.name}です`}
+          : destinationName
+            ? `まもなく${destinationName}です`
+            : "起きる時間です"}
       </p>
       <p className="mt-2.5 text-base text-muted-foreground">
         {formatTimeWithDay(
@@ -256,7 +271,7 @@ export function AlarmScreen({
 
       <div className="h-12" />
 
-      {config.wakeStyle.id === "gentle" && (
+      {activeWakeStyle.id === "gentle" && (
         <>
           <Button
             onPointerDown={recordFirstInteraction}
@@ -275,7 +290,7 @@ export function AlarmScreen({
         </>
       )}
 
-      {config.wakeStyle.id === "standard" && (
+      {activeWakeStyle.id === "standard" && (
         <>
           <Button
             onPointerDown={recordFirstInteraction}
@@ -294,7 +309,7 @@ export function AlarmScreen({
         </>
       )}
 
-      {config.wakeStyle.id === "strong" && (
+      {activeWakeStyle.id === "strong" && (
         <>
           <div
             ref={slideTrackRef}

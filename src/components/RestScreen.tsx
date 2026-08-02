@@ -7,6 +7,7 @@ import {
   Coffee,
   Headphones,
   Moon,
+  TriangleAlert,
   X,
 } from "lucide-react";
 
@@ -36,6 +37,7 @@ export function RestScreen({
       : new Date()
   );
   const isBreak = config.mode === "break";
+  const destinationName = config.station.name.trim();
   const isDemo = config.demoMode.offsetSeconds !== null;
 
   useEffect(() => {
@@ -75,6 +77,24 @@ export function RestScreen({
           {isBreak ? "休憩中" : "おやすみ準備OK！"}
         </h2>
       </div>
+
+      <Card className="mb-5 border-destructive/40 bg-destructive/10 px-4 py-4">
+        <div className="flex items-start gap-3">
+          <TriangleAlert
+            size={24}
+            className="mt-0.5 shrink-0 text-destructive"
+          />
+          <div>
+            <p className="text-base font-extrabold text-foreground">
+              この画面を開いたままにしてください
+            </p>
+            <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
+              端末をロックしたり、別のアプリへ移動したりすると、
+              Web版では予定時刻に鳴らない場合があります。
+            </p>
+          </div>
+        </div>
+      </Card>
 
       <Card className="px-5 py-5">
         <StatusRow
@@ -127,7 +147,9 @@ export function RestScreen({
         <p className="mb-4 text-lg font-bold text-moon">
           {isBreak
             ? "休憩終了まで"
-            : `${config.station.name}まで`}
+            : destinationName
+              ? `${destinationName}まで`
+              : "起床予定まで"}
         </p>
         <p className="text-[15px] text-muted-foreground">
           あと

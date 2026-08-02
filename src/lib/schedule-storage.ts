@@ -1,5 +1,7 @@
 import { LEAD_TIMES, WAKE_STYLES } from "./data";
+import { ALARM_SOUNDS } from "./sound";
 import type {
+  AlarmSoundId,
   LeadTimeId,
   RecurringSchedule,
   RecurringScheduleOccurrence,
@@ -33,6 +35,11 @@ function isRepeatPattern(value: unknown): value is RepeatPattern {
 
 function isWakeStyleId(value: unknown): value is WakeStyleId {
   return WAKE_STYLES.some((style) => style.id === value);
+}
+
+
+function isAlarmSoundId(value: unknown): value is AlarmSoundId {
+  return ALARM_SOUNDS.some((sound) => sound.id === value);
 }
 
 function isLeadTimeId(value: unknown): value is LeadTimeId {
@@ -117,6 +124,9 @@ function normalizeSchedule(
     skippedDates: normalizeSkippedDates(
       raw.skippedDates
     ),
+    alarmSoundId: isAlarmSoundId(raw.alarmSoundId)
+      ? raw.alarmSoundId
+      : "radial",
     createdAt:
       typeof raw.createdAt === "string"
         ? raw.createdAt

@@ -29,6 +29,7 @@ const STATUS_LABEL: Record<string, string> = {
   set: "設定中",
   fired: "鳴動済み",
   cancelled: "取り消し",
+  missed: "未実行",
 };
 
 function wakeStyleLabel(
@@ -221,7 +222,7 @@ function HistoryCard({
                   ? ` ${row.duration_minutes}分`
                   : ""
               }`
-            : row.station_name}
+            : row.station_name.trim() || "電車アラーム"}
         </span>
         <StatusBadge
           status={row.status}
@@ -355,7 +356,7 @@ function StatusBadge({
   const color =
     status === "fired"
       ? "bg-success/15 text-success"
-      : status === "cancelled"
+      : status === "cancelled" || status === "missed"
         ? "bg-destructive/12 text-destructive"
         : "bg-moon/15 text-moon";
 

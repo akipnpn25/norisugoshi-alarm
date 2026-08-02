@@ -1,14 +1,7 @@
 import { getStoredAudioOutputDeviceId } from "./headphone";
-import type { WakeStyleId } from "./types";
+import type { AlarmSoundId, WakeStyleId } from "./types";
 
-export type AlarmSoundId =
-  | "radial"
-  | "arpeggio"
-  | "twinkle"
-  | "sunrise"
-  | "crescent"
-  | "aurora"
-  | "horizon";
+export type { AlarmSoundId } from "./types";
 
 export interface AlarmSound {
   id: AlarmSoundId;
@@ -140,6 +133,9 @@ type Tone = {
   detune?: number;
 };
 
+const activeOscillators = new Set<OscillatorNode>();
+const activeGains = new Set<GainNode>();
+
 function playTone(
   ctx: AudioContext,
   t: Tone,
@@ -160,6 +156,28 @@ function playTone(
   g.gain.exponentialRampToValueAtTime(0.0001, end);
   osc.connect(g);
   g.connect(ctx.destination);
+
+  activeOscillators.add(osc);
+  activeGains.add(g);
+
+  const cleanup = () => {
+    activeOscillators.delete(osc);
+    activeGains.delete(g);
+
+    try {
+      osc.disconnect();
+    } catch {
+      // すでに切断済みなら何もしない
+    }
+
+    try {
+      g.disconnect();
+    } catch {
+      // すでに切断済みなら何もしない
+    }
+  };
+
+  osc.addEventListener("ended", cleanup, { once: true });
   osc.start(start);
   osc.stop(end + 0.05);
 }
@@ -465,6 +483,30 @@ export function stopAlarm(): void {
     clearTimeout(loopTimer);
     loopTimer = null;
   }
+
+  // Web Audio では、すでに予約した音はタイマーを止めるだけでは
+  // 鳴り続けるため、作成済みの音源もその場で停止する。
+  const now = audioCtx?.currentTime ?? 0;
+
+  for (const gain of activeGains) {
+    try {
+      gain.gain.cancelScheduledValues(now);
+      gain.gain.setValueAtTime(0, now);
+    } catch {
+      // AudioContext の状態によって停止済みの場合がある
+    }
+  }
+
+  for (const oscillator of activeOscillators) {
+    try {
+      oscillator.stop(now);
+    } catch {
+      // すでに停止済みなら何もしない
+    }
+  }
+
+  activeOscillators.clear();
+  activeGains.clear();
 
   if (typeof navigator !== "undefined" && "vibrate" in navigator) {
     navigator.vibrate(0);

@@ -1,39 +1,48 @@
 "use client";
 
-import { Bell, Moon, MapPin, Clock, ArrowRight, Plus, Music } from "lucide-react";
+import {
+  Bell,
+  Moon,
+  Clock,
+  ArrowRight,
+  Music,
+  Bookmark,
+  CalendarClock,
+  SlidersHorizontal,
+} from "lucide-react";
 
 import { Button } from "@/src/components/ui/button";
 import { Card } from "@/src/components/ui/card";
 import { WeeklyReportCard } from "@/src/components/WeeklyReportCard";
 import type { Tab } from "@/src/lib/types";
-import type { StationRow } from "@/src/lib/stations";
-
 import { ALARM_SOUNDS } from "@/src/lib/sound";
 
 interface HomeScreenProps {
   earphoneConnected: boolean;
   earphoneChecked: boolean;
-  stations: StationRow[];
   alarmSoundLabel: string;
   onGoToAlarm: () => void;
   onGoToSettings: () => void;
-  onSelectStation: (id: string) => void;
 }
 
 export function HomeScreen({
   earphoneConnected,
   earphoneChecked,
-  stations,
   alarmSoundLabel,
   onGoToAlarm,
   onGoToSettings,
-  onSelectStation,
 }: HomeScreenProps) {
   const steps = [
-    { icon: <MapPin size={18} />, text: "目的地を選ぶ" },
-    { icon: <Clock size={18} />, text: "到着時刻を入力" },
-    { icon: <Bell size={18} />, text: "音の出力先を試し音で確認" },
-    { icon: <Music size={18} />, text: "設定でアラーム音を選ぶ" },
+    {
+      icon: <Bookmark size={18} />,
+      text: "マイ設定を選ぶ、または到着時刻を設定",
+    },
+    { icon: <Clock size={18} />, text: "起こすタイミングを選ぶ" },
+    {
+      icon: <SlidersHorizontal size={18} />,
+      text: "必要に応じて詳細設定を確認",
+    },
+    { icon: <Bell size={18} />, text: "アラームをセット" },
   ];
 
   return (
@@ -106,31 +115,48 @@ export function HomeScreen({
 
       <WeeklyReportCard />
 
-      {/* よく使う駅（履歴順） */}
+      {/* 保存設定の違い */}
       <div className="mb-3 mt-7 flex items-center justify-between">
-        <p className="text-base font-bold text-foreground">最近の駅</p>
-        <span className="text-[11px] font-bold text-muted-foreground">履歴順</span>
-      </div>
-      <div className="-mx-5 flex gap-2.5 overflow-x-auto px-5 pb-2 scrollbar-hide">
-        {stations.map((s) => (
-          <button
-            key={s.id}
-            onClick={() => onSelectStation(s.id)}
-            className="shrink-0 rounded-2xl border border-border bg-card px-4 py-3 text-[14px] font-bold text-foreground transition-all hover:bg-night-surface active:scale-95"
-          >
-            {s.name}
-          </button>
-        ))}
+        <p className="text-base font-bold text-foreground">
+          2つの保存方法
+        </p>
         <button
-          onClick={onGoToAlarm}
-          className="shrink-0 rounded-2xl border border-dashed border-moon/50 px-4 py-3 text-[14px] font-bold text-moon transition-all hover:bg-moon/10 active:scale-95"
+          type="button"
+          onClick={onGoToSettings}
+          className="text-xs font-bold text-moon"
         >
-          <span className="flex items-center gap-1.5">
-            <Plus size={15} />
-            追加
-          </span>
+          設定で管理
         </button>
       </div>
+      <Card className="bg-card p-0">
+        <div className="flex gap-3 px-4 py-4">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-moon/15 text-moon">
+            <Bookmark size={20} />
+          </span>
+          <div>
+            <p className="text-sm font-extrabold text-foreground">
+              マイ設定
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              必要な日に、電車画面のボタンを自分で押して呼び出します。
+            </p>
+          </div>
+        </div>
+        <div className="mx-4 h-px bg-border" />
+        <div className="flex gap-3 px-4 py-4">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-moon/15 text-moon">
+            <CalendarClock size={20} />
+          </span>
+          <div>
+            <p className="text-sm font-extrabold text-foreground">
+              繰り返し設定
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              曜日を決めると、アプリを開いている間に指定時刻から自動で動きます。
+            </p>
+          </div>
+        </div>
+      </Card>
 
       {/* 使い方 */}
       <p className="mb-3 mt-7 text-base font-bold text-foreground">使い方</p>

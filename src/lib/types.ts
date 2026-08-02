@@ -9,6 +9,15 @@ export type SetupMode = "transit" | "break";
 
 export type WakeStyleId = "gentle" | "standard" | "strong";
 
+export type AlarmSoundId =
+  | "radial"
+  | "arpeggio"
+  | "twinkle"
+  | "sunrise"
+  | "crescent"
+  | "aurora"
+  | "horizon";
+
 export interface WakeStyleOption {
   id: WakeStyleId;
   label: string;
@@ -61,6 +70,10 @@ export interface AlarmConfig {
   breakWarningEnabled?: boolean;
   alarmFiredAt?: Date;
   firstInteractionAt?: Date;
+  /** 現在鳴っている段階の起こし方。未設定時は wakeStyle を使う。 */
+  activeWakeStyle?: WakeStyleOption;
+  /** 段階アラームの進行状況。1=開始、2=強化、3=最終再通知。 */
+  alarmStage?: 1 | 2 | 3;
 }
 
 export interface AlarmInput {
@@ -79,6 +92,7 @@ export interface RecurringScheduleBase {
   repeatPattern: RepeatPattern;
   weekdays: Weekday[];
   skippedDates: string[];
+  alarmSoundId: AlarmSoundId;
   createdAt: string;
   updatedAt: string;
 }
@@ -106,6 +120,33 @@ export interface BreakRecurringSchedule
 export type RecurringSchedule =
   | TransitRecurringSchedule
   | BreakRecurringSchedule;
+
+export interface QuickSettingBase {
+  id: string;
+  name: string;
+  wakeStyleId: WakeStyleId;
+  alarmSoundId: AlarmSoundId;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TransitQuickSetting extends QuickSettingBase {
+  mode: "transit";
+  station: Station;
+  arrivalHour: number;
+  arrivalMinute: number;
+  leadTimeId: LeadTimeId;
+}
+
+export interface BreakQuickSetting extends QuickSettingBase {
+  mode: "break";
+  durationMinutes: number;
+  warningEnabled: boolean;
+}
+
+export type QuickSetting =
+  | TransitQuickSetting
+  | BreakQuickSetting;
 
 export interface RecurringScheduleOccurrence {
   schedule: RecurringSchedule;
