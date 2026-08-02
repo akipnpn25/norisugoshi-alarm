@@ -7,6 +7,7 @@ import {
   Coffee,
   Headphones,
   Moon,
+  Sparkles,
   TriangleAlert,
   X,
 } from "lucide-react";
@@ -125,6 +126,25 @@ export function RestScreen({
                 config.breakWarningEnabled
                   ? "あり"
                   : "なし"
+              }
+              ok
+            />
+          </>
+        )}
+
+        {!isBreak && config.adaptiveSampleCount && (
+          <>
+            <Divider />
+            <StatusRow
+              icon={<Sparkles size={22} />}
+              label="スマート調整"
+              value={
+                config.adaptiveExtraLeadMinutes
+                  ? `${config.adaptiveExtraLeadMinutes}分早め`
+                  : `${Math.round(
+                      (config.adaptiveStageTwoDelayMs ?? 30000) /
+                        1000
+                    )}秒後に強化`
               }
               ok
             />

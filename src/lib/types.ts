@@ -74,6 +74,16 @@ export interface AlarmConfig {
   activeWakeStyle?: WakeStyleOption;
   /** 段階アラームの進行状況。1=開始、2=強化、3=最終再通知。 */
   alarmStage?: 1 | 2 | 3;
+  /** 個人調整された2段階目までの時間。 */
+  adaptiveStageTwoDelayMs?: number;
+  /** 個人調整された最終段階までの時間。 */
+  adaptiveStageThreeDelayMs?: number;
+  /** 過去の反応に基づき、実際に前倒しした分数。 */
+  adaptiveExtraLeadMinutes?: number;
+  /** 個人調整に使用した反応記録数。 */
+  adaptiveSampleCount?: number;
+  /** 個人調整に使用した反応時間の中央値。 */
+  adaptiveMedianReactionMs?: number;
 }
 
 export interface AlarmInput {

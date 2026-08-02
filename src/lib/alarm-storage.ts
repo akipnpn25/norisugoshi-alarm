@@ -20,6 +20,11 @@ export interface StoredActiveAlarm {
   firstInteractionAt?: string;
   activeWakeStyle?: AlarmConfig["activeWakeStyle"];
   alarmStage?: AlarmConfig["alarmStage"];
+  adaptiveStageTwoDelayMs?: number;
+  adaptiveStageThreeDelayMs?: number;
+  adaptiveExtraLeadMinutes?: number;
+  adaptiveSampleCount?: number;
+  adaptiveMedianReactionMs?: number;
   historyId: string;
 }
 
@@ -46,6 +51,15 @@ export function saveActiveAlarm(
       config.firstInteractionAt?.toISOString(),
     activeWakeStyle: config.activeWakeStyle,
     alarmStage: config.alarmStage,
+    adaptiveStageTwoDelayMs:
+      config.adaptiveStageTwoDelayMs,
+    adaptiveStageThreeDelayMs:
+      config.adaptiveStageThreeDelayMs,
+    adaptiveExtraLeadMinutes:
+      config.adaptiveExtraLeadMinutes,
+    adaptiveSampleCount: config.adaptiveSampleCount,
+    adaptiveMedianReactionMs:
+      config.adaptiveMedianReactionMs,
     historyId,
   };
 
@@ -131,6 +145,41 @@ export function loadActiveAlarm(): {
               style.id === stored.activeWakeStyle?.id
           )
         : undefined;
+    const adaptiveStageTwoDelayMs =
+      typeof stored.adaptiveStageTwoDelayMs === "number" &&
+      Number.isFinite(stored.adaptiveStageTwoDelayMs) &&
+      stored.adaptiveStageTwoDelayMs >= 10 * 1000 &&
+      stored.adaptiveStageTwoDelayMs <= 2 * 60 * 1000
+        ? stored.adaptiveStageTwoDelayMs
+        : undefined;
+    const adaptiveStageThreeDelayMs =
+      typeof stored.adaptiveStageThreeDelayMs === "number" &&
+      Number.isFinite(stored.adaptiveStageThreeDelayMs) &&
+      stored.adaptiveStageThreeDelayMs >
+        (adaptiveStageTwoDelayMs ?? 0) &&
+      stored.adaptiveStageThreeDelayMs <= 5 * 60 * 1000
+        ? stored.adaptiveStageThreeDelayMs
+        : undefined;
+    const adaptiveExtraLeadMinutes =
+      typeof stored.adaptiveExtraLeadMinutes === "number" &&
+      Number.isInteger(stored.adaptiveExtraLeadMinutes) &&
+      stored.adaptiveExtraLeadMinutes >= 0 &&
+      stored.adaptiveExtraLeadMinutes <= 3
+        ? stored.adaptiveExtraLeadMinutes
+        : undefined;
+    const adaptiveSampleCount =
+      typeof stored.adaptiveSampleCount === "number" &&
+      Number.isInteger(stored.adaptiveSampleCount) &&
+      stored.adaptiveSampleCount >= 0
+        ? stored.adaptiveSampleCount
+        : undefined;
+    const adaptiveMedianReactionMs =
+      typeof stored.adaptiveMedianReactionMs === "number" &&
+      Number.isFinite(stored.adaptiveMedianReactionMs) &&
+      stored.adaptiveMedianReactionMs >= 0 &&
+      stored.adaptiveMedianReactionMs <= 5 * 60 * 1000
+        ? stored.adaptiveMedianReactionMs
+        : undefined;
 
     if (invalidBase || invalidBreak || invalidTiming) {
       clearActiveAlarm();
@@ -160,6 +209,11 @@ export function loadActiveAlarm(): {
         firstInteractionAt,
         activeWakeStyle,
         alarmStage,
+        adaptiveStageTwoDelayMs,
+        adaptiveStageThreeDelayMs,
+        adaptiveExtraLeadMinutes,
+        adaptiveSampleCount,
+        adaptiveMedianReactionMs,
       },
       historyId: stored.historyId,
     };

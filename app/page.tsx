@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { AlarmScreen } from "@/src/components/AlarmScreen";
 import { BreakSetupScreen } from "@/src/components/BreakSetupScreen";
@@ -57,17 +57,22 @@ import {
 } from "@/src/lib/schedule-storage";
 import { supabase } from "@/src/lib/supabase";
 import {
+  buildAdaptiveAlarmPlan,
   clearPendingWakeStyle,
+  DEFAULT_ADAPTIVE_ALARM_PLAN,
+  getAdaptiveAlarmTime,
   getPendingWakeStyles,
   getStrongerWakeStyle,
   recordTimedResponse,
   setPendingWakeStyle,
+  type AdaptiveAlarmPlan,
   type ImmediateRecommendation,
   type RecommendationMode,
 } from "@/src/lib/recommendation";
 import { calculateAlarmTime } from "@/src/lib/time";
 import type {
   AlarmConfig,
+  AlarmHistoryRow,
   AlarmInput,
   BreakDurationOption,
   BreakInput,
@@ -161,17 +166,55 @@ function getStageWakeStyle(
 }
 
 function getAlarmStageFromElapsed(
-  elapsedMs: number
+  elapsedMs: number,
+  stageTwoDelayMs = ALARM_STAGE_TWO_DELAY_MS,
+  stageThreeDelayMs = ALARM_STAGE_THREE_DELAY_MS
 ): 1 | 2 | 3 {
-  if (elapsedMs >= ALARM_STAGE_THREE_DELAY_MS) {
+  if (elapsedMs >= stageThreeDelayMs) {
     return 3;
   }
 
-  if (elapsedMs >= ALARM_STAGE_TWO_DELAY_MS) {
+  if (elapsedMs >= stageTwoDelayMs) {
     return 2;
   }
 
   return 1;
+}
+
+function applyAdaptiveAlarmPlanToConfig(
+  config: AlarmConfig,
+  plan: AdaptiveAlarmPlan,
+  allowImmediate = false
+): AlarmConfig {
+  if (
+    config.mode !== "transit" ||
+    config.demoMode.id !== "normal" ||
+    config.adaptiveStageTwoDelayMs !== undefined
+  ) {
+    return config;
+  }
+
+  if (!plan.personalized) {
+    return config;
+  }
+
+  const timing = getAdaptiveAlarmTime(
+    config.alarmTime,
+    plan,
+    new Date(),
+    allowImmediate
+  );
+
+  return {
+    ...config,
+    alarmTime: timing.alarmTime,
+    adaptiveStageTwoDelayMs: plan.stageTwoDelayMs,
+    adaptiveStageThreeDelayMs: plan.stageThreeDelayMs,
+    adaptiveExtraLeadMinutes:
+      timing.appliedExtraLeadMinutes,
+    adaptiveSampleCount: plan.sampleCount,
+    adaptiveMedianReactionMs: plan.medianReactionMs ?? undefined,
+  };
 }
 
 interface AlarmTimingResult {
@@ -465,6 +508,12 @@ export default function Home() {
     useState<
       Partial<Record<RecommendationMode, WakeStyleId>>
     >({});
+  const [adaptiveAlarmPlan, setAdaptiveAlarmPlan] =
+    useState<AdaptiveAlarmPlan>(
+      DEFAULT_ADAPTIVE_ALARM_PLAN
+    );
+  const [adaptivePlanLoading, setAdaptivePlanLoading] =
+    useState(true);
 
   const timerRef =
     useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -513,6 +562,40 @@ export default function Home() {
     clearAlarmStageTimers();
   };
 
+  const refreshAdaptiveAlarmPlan = useCallback(async () => {
+    setAdaptivePlanLoading(true);
+
+    try {
+      await ensureAnonymousSession();
+
+      const { data, error } = await supabase
+        .from("alarm_history")
+        .select("*")
+        .eq("mode", "transit")
+        .eq("demo_mode", "normal")
+        .order("created_at", { ascending: false })
+        .limit(20);
+
+      if (error) throw error;
+
+      setAdaptiveAlarmPlan(
+        buildAdaptiveAlarmPlan(
+          (data ?? []) as AlarmHistoryRow[]
+        )
+      );
+    } catch (error) {
+      console.warn(
+        "スマート調整用の履歴読み込みに失敗:",
+        error
+      );
+      setAdaptiveAlarmPlan(
+        DEFAULT_ADAPTIVE_ALARM_PLAN
+      );
+    } finally {
+      setAdaptivePlanLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     setAlarmSoundId(getStoredAlarmSound());
     setPendingWakeStyles(getPendingWakeStyles());
@@ -528,6 +611,7 @@ export default function Home() {
       wakeStyleId: getStoredWakeStyle("break"),
     }));
     loadAlarmSound();
+    void refreshAdaptiveAlarmPlan();
 
     return () => {
       releaseAlarmSound();
@@ -546,7 +630,7 @@ export default function Home() {
         clearTimeout(recurringTimerRef.current);
       }
     };
-  }, []);
+  }, [refreshAdaptiveAlarmPlan]);
 
   useEffect(() => {
     if (!schedulesReady) return;
@@ -603,7 +687,7 @@ export default function Home() {
     }
 
     // 同じ音を再スタートし、段階に応じた強さへ切り替える。
-    playAlarm(undefined, activeWakeStyle.id);
+    playAlarm(undefined, activeWakeStyle.id, stage);
   };
 
   const scheduleAlarmStages = (
@@ -624,14 +708,24 @@ export default function Home() {
       0,
       Date.now() - firedAt.getTime()
     );
+    const stageTwoDelayMs =
+      activeConfig.adaptiveStageTwoDelayMs ??
+      ALARM_STAGE_TWO_DELAY_MS;
+    const stageThreeDelayMs =
+      activeConfig.adaptiveStageThreeDelayMs ??
+      ALARM_STAGE_THREE_DELAY_MS;
     const currentStage =
       activeConfig.alarmStage ??
-      getAlarmStageFromElapsed(elapsedMs);
+      getAlarmStageFromElapsed(
+        elapsedMs,
+        stageTwoDelayMs,
+        stageThreeDelayMs
+      );
 
     if (currentStage < 2) {
       const stageTwoDelay = Math.max(
         0,
-        ALARM_STAGE_TWO_DELAY_MS - elapsedMs
+        stageTwoDelayMs - elapsedMs
       );
 
       alarmStageTwoTimerRef.current = setTimeout(
@@ -646,7 +740,7 @@ export default function Home() {
     if (currentStage < 3) {
       const stageThreeDelay = Math.max(
         0,
-        ALARM_STAGE_THREE_DELAY_MS - elapsedMs
+        stageThreeDelayMs - elapsedMs
       );
 
       alarmStageThreeTimerRef.current = setTimeout(
@@ -701,7 +795,13 @@ export default function Home() {
       Date.now() - alarmFiredAt.getTime()
     );
     const elapsedStage =
-      getAlarmStageFromElapsed(elapsedMs);
+      getAlarmStageFromElapsed(
+        elapsedMs,
+        cfg.adaptiveStageTwoDelayMs ??
+          ALARM_STAGE_TWO_DELAY_MS,
+        cfg.adaptiveStageThreeDelayMs ??
+          ALARM_STAGE_THREE_DELAY_MS
+      );
     const storedStage = cfg.alarmStage ?? 1;
     const alarmStage =
       cfg.mode === "transit"
@@ -742,7 +842,7 @@ export default function Home() {
       saveActiveAlarm(activeConfig, historyId);
     }
 
-    playAlarm(undefined, activeWakeStyle.id);
+    playAlarm(undefined, activeWakeStyle.id, alarmStage);
     scheduleAlarmStages(activeConfig);
     setScreen("alarm");
   };
@@ -956,8 +1056,13 @@ export default function Home() {
     };
   };
 
-  const commitAlarm = (cfg: AlarmConfig) => {
+  const commitAlarm = (baseConfig: AlarmConfig) => {
     if (historyIdRef.current) return;
+
+    const cfg = applyAdaptiveAlarmPlanToConfig(
+      baseConfig,
+      adaptiveAlarmPlan
+    );
 
     alarmFiredAtRef.current = null;
     firstInteractionAtRef.current = null;
@@ -994,7 +1099,11 @@ recurringActionRef.current = (
   setAlarmSoundId(occurrence.schedule.alarmSoundId);
   storeAlarmSound(occurrence.schedule.alarmSoundId);
   commitAlarm(
-    applyPendingWakeStyle(recurringConfig)
+    applyAdaptiveAlarmPlanToConfig(
+      applyPendingWakeStyle(recurringConfig),
+      adaptiveAlarmPlan,
+      true
+    )
   );
 };
 
@@ -1090,8 +1199,18 @@ useEffect(() => {
 
   if (!occurrence) return;
 
+  const adaptiveTriggerAt =
+    occurrence.schedule.mode === "transit" &&
+    adaptiveAlarmPlan.personalized
+      ? new Date(
+          occurrence.triggerAt.getTime() -
+            adaptiveAlarmPlan.extraLeadMinutes *
+              60 *
+              1000
+        )
+      : occurrence.triggerAt;
   const delay =
-    occurrence.triggerAt.getTime() - Date.now();
+    adaptiveTriggerAt.getTime() - Date.now();
 
   if (delay <= 0) {
     recurringActionRef.current(occurrence);
@@ -1110,6 +1229,7 @@ useEffect(() => {
     }
   };
 }, [
+  adaptiveAlarmPlan,
   config,
   recurringSchedules,
   schedulesReady,
@@ -1316,6 +1436,10 @@ const handleToggleTodaySkip = (
           status,
           timing
         );
+
+        if (status === "fired") {
+          await refreshAdaptiveAlarmPlan();
+        }
       })();
     }
   };
@@ -1686,6 +1810,12 @@ const handleToggleTodaySkip = (
                       selectedQuickSettingId={selectedQuickSettingId}
                       onApplyQuickSetting={
                         handleApplyQuickSetting
+                      }
+                      adaptiveAlarmPlan={
+                        adaptiveAlarmPlan
+                      }
+                      adaptivePlanLoading={
+                        adaptivePlanLoading
                       }
                       onSetAlarm={
                         handleSetRealAlarm

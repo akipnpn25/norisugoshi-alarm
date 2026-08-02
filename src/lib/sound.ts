@@ -325,6 +325,8 @@ function buildPattern(id: AlarmSoundId): { tones: Tone[]; cycle: number } {
   }
 }
 
+type AlarmStage = 1 | 2 | 3;
+
 type WakeSoundProfile = {
   gainScale: number;
   cycleScale: number;
@@ -333,57 +335,76 @@ type WakeSoundProfile = {
 
 function getWakeSoundProfile(
   wakeStyleId: WakeStyleId,
-  elapsedSeconds: number
+  elapsedSeconds: number,
+  alarmStage: AlarmStage
 ): WakeSoundProfile {
+  let baseProfile: WakeSoundProfile;
+
   if (wakeStyleId === "gentle") {
-    return {
+    baseProfile = {
       gainScale: 0.52,
       cycleScale: 1.2,
       vibration: null,
     };
-  }
-
-  if (wakeStyleId === "strong") {
+  } else if (wakeStyleId === "strong") {
     if (elapsedSeconds < 8) {
-      return {
+      baseProfile = {
         gainScale: 0.95,
         cycleScale: 0.95,
         vibration: [180, 80, 180],
       };
-    }
-    if (elapsedSeconds < 16) {
-      return {
+    } else if (elapsedSeconds < 16) {
+      baseProfile = {
         gainScale: 1.2,
         cycleScale: 0.82,
         vibration: [220, 70, 220],
       };
+    } else {
+      baseProfile = {
+        gainScale: 1.5,
+        cycleScale: 0.68,
+        vibration: [280, 60, 280, 60, 280],
+      };
     }
-    return {
-      gainScale: 1.5,
-      cycleScale: 0.68,
-      vibration: [280, 60, 280, 60, 280],
-    };
-  }
-
-  if (elapsedSeconds < 10) {
-    return {
+  } else if (elapsedSeconds < 10) {
+    baseProfile = {
       gainScale: 0.72,
       cycleScale: 1.05,
       vibration: null,
     };
-  }
-  if (elapsedSeconds < 20) {
-    return {
+  } else if (elapsedSeconds < 20) {
+    baseProfile = {
       gainScale: 0.92,
       cycleScale: 0.95,
       vibration: 180,
     };
+  } else {
+    baseProfile = {
+      gainScale: 1.15,
+      cycleScale: 0.82,
+      vibration: [220, 90, 220],
+    };
   }
-  return {
-    gainScale: 1.15,
-    cycleScale: 0.82,
-    vibration: [220, 90, 220],
-  };
+
+  // 段階が切り替わるたびに再生時間は0秒へ戻る。
+  // その際に直前より弱くならないよう、段階ごとの最低強度を設ける。
+  if (alarmStage === 2) {
+    return {
+      gainScale: Math.max(baseProfile.gainScale, 1.55),
+      cycleScale: Math.min(baseProfile.cycleScale, 0.68),
+      vibration: [300, 55, 300, 55, 300],
+    };
+  }
+
+  if (alarmStage === 3) {
+    return {
+      gainScale: Math.max(baseProfile.gainScale, 1.85),
+      cycleScale: Math.min(baseProfile.cycleScale, 0.48),
+      vibration: [380, 45, 380, 45, 380, 45, 380],
+    };
+  }
+
+  return baseProfile;
 }
 
 let loopTimer: ReturnType<typeof setTimeout> | null = null;
@@ -392,7 +413,8 @@ let alarmRunId = 0;
 
 export function playAlarm(
   soundId?: AlarmSoundId,
-  wakeStyleId: WakeStyleId = "standard"
+  wakeStyleId: WakeStyleId = "standard",
+  alarmStage: AlarmStage = 1
 ): void {
   if (typeof window === "undefined") return;
 
@@ -417,7 +439,8 @@ export function playAlarm(
       (performance.now() - startedAt) / 1000;
     const profile = getWakeSoundProfile(
       wakeStyleId,
-      elapsedSeconds
+      elapsedSeconds,
+      alarmStage
     );
 
     for (const tone of tones) {

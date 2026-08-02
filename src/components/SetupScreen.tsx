@@ -6,6 +6,7 @@ import {
   Bookmark,
   Clock,
   Bell,
+  Sparkles,
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
@@ -25,6 +26,10 @@ import type {
   WakeStyleId,
 } from "@/src/lib/types";
 import {
+  getAdaptiveAlarmTime,
+  type AdaptiveAlarmPlan,
+} from "@/src/lib/recommendation";
+import {
   calculateAlarmTime,
   formatTime,
   formatTimeWithDay,
@@ -42,6 +47,8 @@ interface SetupScreenProps {
   quickSettings: TransitQuickSetting[];
   selectedQuickSettingId: string | null;
   onApplyQuickSetting: (setting: TransitQuickSetting) => void;
+  adaptiveAlarmPlan: AdaptiveAlarmPlan;
+  adaptivePlanLoading: boolean;
   onSetAlarm: () => void;
   onHeadphoneCheckStart?: () => void;
   onHeadphoneCheckEnd: (connected: boolean, name: string, error: string | null) => void;
@@ -58,6 +65,8 @@ export function SetupScreen({
   quickSettings,
   selectedQuickSettingId,
   onApplyQuickSetting,
+  adaptiveAlarmPlan,
+  adaptivePlanLoading,
   onSetAlarm,
   onHeadphoneCheckStart,
   onHeadphoneCheckEnd,
@@ -71,7 +80,15 @@ export function SetupScreen({
   const leadTime =
     availableLeadTimes.find((l) => l.id === input.leadTimeId) ??
     LEAD_TIMES[1];
-  const alarmTime = calculateAlarmTime(input.arrivalTime, leadTime);
+  const baseAlarmTime = calculateAlarmTime(
+    input.arrivalTime,
+    leadTime
+  );
+  const adaptiveTiming = getAdaptiveAlarmTime(
+    baseAlarmTime,
+    adaptiveAlarmPlan
+  );
+  const alarmTime = adaptiveTiming.alarmTime;
   const wakeStyle =
     WAKE_STYLES.find((style) => style.id === input.wakeStyleId) ??
     WAKE_STYLES[1];
@@ -211,6 +228,52 @@ export function SetupScreen({
           );
         })}
       </div>
+
+      <Card className="mt-3 border-moon/30 bg-moon/10 px-4 py-4">
+        <div className="flex items-start gap-3">
+          <Sparkles
+            size={21}
+            className="mt-0.5 shrink-0 text-moon"
+          />
+          <div>
+            <p className="text-sm font-extrabold text-foreground">
+              スマート調整
+            </p>
+            {adaptivePlanLoading ? (
+              <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
+                過去の反応を確認しています。
+              </p>
+            ) : adaptiveAlarmPlan.personalized ? (
+              <>
+                <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
+                  過去{adaptiveAlarmPlan.sampleCount}回の反応から、
+                  {adaptiveTiming.appliedExtraLeadMinutes > 0
+                    ? `今回は選んだ時刻より${adaptiveTiming.appliedExtraLeadMinutes}分早く開始します。`
+                    : adaptiveAlarmPlan.extraLeadMinutes > 0
+                      ? "開始時刻が近いため、今回は早め調整を行いません。"
+                      : "今回は選んだ起床時刻から開始します。"}
+                </p>
+                <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
+                  反応がなければ
+                  {Math.round(
+                    adaptiveAlarmPlan.stageTwoDelayMs / 1000
+                  )}
+                  秒後、
+                  {Math.round(
+                    adaptiveAlarmPlan.stageThreeDelayMs / 1000
+                  )}
+                  秒後に段階的に強くします。
+                </p>
+              </>
+            ) : (
+              <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
+                反応記録が3回たまるまでは、標準の30秒後・90秒後に
+                強くします。現在{adaptiveAlarmPlan.sampleCount}/3回です。
+              </p>
+            )}
+          </div>
+        </div>
+      </Card>
 
       {/* 3. 詳細設定 */}
       <SectionLabel num="3" text="詳細設定" icon={<Bell size={16} />} />

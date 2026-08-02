@@ -44,6 +44,39 @@ export interface WeeklySummary {
   late: number;
 }
 
+export type AdaptiveAlarmProfile =
+  | "standard"
+  | "quick"
+  | "balanced"
+  | "slow";
+
+export interface AdaptiveAlarmPlan {
+  personalized: boolean;
+  sampleCount: number;
+  medianReactionMs: number | null;
+  recentLateCount: number;
+  extraLeadMinutes: number;
+  stageTwoDelayMs: number;
+  stageThreeDelayMs: number;
+  profile: AdaptiveAlarmProfile;
+}
+
+export interface AdaptiveAlarmTimeResult {
+  alarmTime: Date;
+  appliedExtraLeadMinutes: number;
+}
+
+export const DEFAULT_ADAPTIVE_ALARM_PLAN: AdaptiveAlarmPlan = {
+  personalized: false,
+  sampleCount: 0,
+  medianReactionMs: null,
+  recentLateCount: 0,
+  extraLeadMinutes: 0,
+  stageTwoDelayMs: 30 * 1000,
+  stageThreeDelayMs: 90 * 1000,
+  profile: "standard",
+};
+
 const STORAGE_KEY =
   "oyasumi_assist_recommendation_state";
 
@@ -311,4 +344,173 @@ export function formatWeekRange(
   return `${range.start.getMonth() + 1}月${range.start.getDate()}日〜${
     lastDay.getMonth() + 1
   }月${lastDay.getDate()}日`;
+}
+
+
+function clampNumber(
+  value: number,
+  minimum: number,
+  maximum: number
+): number {
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
+function roundToFiveSeconds(valueMs: number): number {
+  return Math.round(valueMs / 5000) * 5000;
+}
+
+function getMedian(values: number[]): number | null {
+  if (values.length === 0) return null;
+
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+
+  if (sorted.length % 2 === 1) {
+    return sorted[middle];
+  }
+
+  return Math.round(
+    (sorted[middle - 1] + sorted[middle]) / 2
+  );
+}
+
+/**
+ * 直近の実測反応から、電車モードの段階アラームを安全な範囲で調整する。
+ * 記録が3回未満の場合は、従来の30秒・90秒ルールを維持する。
+ */
+export function buildAdaptiveAlarmPlan(
+  rows: AlarmHistoryRow[]
+): AdaptiveAlarmPlan {
+  const recentRows = [...rows]
+    .filter(
+      (row) =>
+        row.mode === "transit" &&
+        row.demo_mode === "normal" &&
+        row.status === "fired"
+    )
+    .sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() -
+        new Date(a.created_at).getTime()
+    )
+    .slice(0, 20);
+
+  const measuredRows = recentRows
+    .filter(
+      (row) =>
+        typeof row.reaction_ms === "number" &&
+        Number.isFinite(row.reaction_ms) &&
+        row.reaction_ms >= 0 &&
+        row.reaction_ms <= 5 * 60 * 1000
+    )
+    .slice(0, 10);
+
+  const sampleCount = measuredRows.length;
+
+  if (sampleCount < 3) {
+    return {
+      ...DEFAULT_ADAPTIVE_ALARM_PLAN,
+      sampleCount,
+    };
+  }
+
+  const medianReactionMs =
+    getMedian(
+      measuredRows.map((row) => row.reaction_ms as number)
+    ) ?? DEFAULT_ADAPTIVE_ALARM_PLAN.stageTwoDelayMs;
+  const recentLateCount = recentRows
+    .map(getResponseOutcome)
+    .filter((outcome) => outcome !== "unmeasured")
+    .slice(0, 3)
+    .filter((outcome) => outcome === "late").length;
+
+  let profile: AdaptiveAlarmProfile;
+  let stageTwoDelayMs: number;
+  let extraLeadMinutes = 0;
+
+  if (medianReactionMs <= 15 * 1000) {
+    profile = "quick";
+    stageTwoDelayMs = 45 * 1000;
+  } else if (medianReactionMs <= 35 * 1000) {
+    profile = "balanced";
+    stageTwoDelayMs = clampNumber(
+      roundToFiveSeconds(medianReactionMs + 10 * 1000),
+      35 * 1000,
+      50 * 1000
+    );
+  } else {
+    profile = "slow";
+    stageTwoDelayMs = clampNumber(
+      roundToFiveSeconds(medianReactionMs + 10 * 1000),
+      45 * 1000,
+      60 * 1000
+    );
+    extraLeadMinutes = clampNumber(
+      Math.ceil(medianReactionMs / (60 * 1000)),
+      1,
+      3
+    );
+  }
+
+  if (recentLateCount >= 1) {
+    extraLeadMinutes = Math.max(extraLeadMinutes, 1);
+  }
+
+  if (recentLateCount >= 2) {
+    extraLeadMinutes = Math.max(extraLeadMinutes, 2);
+  }
+
+  return {
+    personalized: true,
+    sampleCount,
+    medianReactionMs,
+    recentLateCount,
+    extraLeadMinutes,
+    stageTwoDelayMs,
+    stageThreeDelayMs: stageTwoDelayMs + 60 * 1000,
+    profile,
+  };
+}
+
+/**
+ * 選択した起床時刻から、学習結果による前倒しを反映した実時刻を返す。
+ * 手動設定で前倒し時刻をすでに過ぎている場合は、突然鳴らさず元の時刻を使う。
+ * 繰り返し設定のタイマーから呼ぶ場合だけ allowImmediate を true にし、遅延分は即時開始する。
+ */
+export function getAdaptiveAlarmTime(
+  baseAlarmTime: Date,
+  plan: AdaptiveAlarmPlan,
+  now: Date = new Date(),
+  allowImmediate = false
+): AdaptiveAlarmTimeResult {
+  if (!plan.personalized || plan.extraLeadMinutes <= 0) {
+    return {
+      alarmTime: new Date(baseAlarmTime),
+      appliedExtraLeadMinutes: 0,
+    };
+  }
+
+  const desiredTime = new Date(
+    baseAlarmTime.getTime() -
+      plan.extraLeadMinutes * 60 * 1000
+  );
+
+  if (desiredTime.getTime() > now.getTime()) {
+    return {
+      alarmTime: desiredTime,
+      appliedExtraLeadMinutes: plan.extraLeadMinutes,
+    };
+  }
+
+  if (allowImmediate && baseAlarmTime.getTime() > now.getTime()) {
+    return {
+      alarmTime: new Date(now),
+      appliedExtraLeadMinutes: plan.extraLeadMinutes,
+    };
+  }
+
+  return {
+    alarmTime: new Date(baseAlarmTime),
+    appliedExtraLeadMinutes: 0,
+  };
 }
