@@ -3,12 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
+  Bell,
   Coffee,
   Hand,
   Sun,
 } from "lucide-react";
 
 import { Button } from "@/src/components/ui/button";
+import { ALARM_SOUNDS } from "@/src/lib/sound";
 import type { AlarmConfig } from "@/src/lib/types";
 import { formatTimeWithDay } from "@/src/lib/time";
 
@@ -44,6 +46,10 @@ export function AlarmScreen({
   const destinationName = config.station.name.trim();
   const activeWakeStyle =
     config.activeWakeStyle ?? config.wakeStyle;
+  const alarmSoundLabel =
+    ALARM_SOUNDS.find(
+      (sound) => sound.id === config.alarmSoundId
+    )?.label ?? "ラジアル";
   const alarmStage = config.alarmStage ?? 1;
 
   useEffect(() => {
@@ -267,6 +273,10 @@ export function AlarmScreen({
             : config.arrivalTime
         )}
         {isBreak ? " 終了予定" : " 到着予定"}
+      </p>
+      <p className="mt-2 flex items-center gap-1.5 text-sm font-bold text-muted-foreground">
+        <Bell size={15} />
+        アラーム音：{alarmSoundLabel}
       </p>
 
       <div className="h-12" />

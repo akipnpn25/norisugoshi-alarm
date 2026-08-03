@@ -232,6 +232,14 @@ interface AlarmTimingResult {
   stopMs: number;
 }
 
+interface AlarmTimingUpdate {
+  alarmFiredAt?: Date;
+  firstInteractionAt?: Date | null;
+  stoppedAt?: Date;
+  reactionMs?: number | null;
+  stopMs?: number;
+}
+
 function getSafeLeadTimeId(value: string): LeadTimeId {
   return LEAD_TIMES.some((item) => item.id === value)
     ? (value as LeadTimeId)
@@ -260,6 +268,7 @@ function buildRecurringAlarmConfig(
       arrivalTime: targetAt,
       leadTime,
       wakeStyle,
+      alarmSoundId: schedule.alarmSoundId,
       alarmTime: triggerAt,
       demoMode: {
         id: "normal",
@@ -276,6 +285,7 @@ function buildRecurringAlarmConfig(
     arrivalTime: targetAt,
     leadTime: BREAK_END_LEAD_TIME,
     wakeStyle,
+    alarmSoundId: schedule.alarmSoundId,
     alarmTime: targetAt,
     demoMode: {
       id: "normal",
@@ -349,6 +359,7 @@ function buildQuickAlarmConfig(
       arrivalTime: targetAt,
       leadTime,
       wakeStyle,
+      alarmSoundId: setting.alarmSoundId,
       alarmTime,
       demoMode: {
         id: "normal",
@@ -370,6 +381,7 @@ function buildQuickAlarmConfig(
     arrivalTime: targetAt,
     leadTime: BREAK_END_LEAD_TIME,
     wakeStyle,
+    alarmSoundId: setting.alarmSoundId,
     alarmTime: targetAt,
     demoMode: {
       id: "normal",
@@ -429,8 +441,12 @@ async function createAlarmHistory(
 
 async function updateAlarmHistoryStatus(
   historyId: string,
-  status: "fired" | "cancelled" | "missed",
-  timing?: AlarmTimingResult
+  status:
+    | "fired"
+    | "cancelled"
+    | "missed"
+    | "unconfirmed",
+  timing?: AlarmTimingUpdate
 ): Promise<void> {
   try {
     await ensureAnonymousSession();
@@ -443,15 +459,27 @@ async function updateAlarmHistoryStatus(
     status,
   };
 
-  if (timing) {
+  if (timing?.alarmFiredAt) {
     updates.alarm_fired_at =
       timing.alarmFiredAt.toISOString();
+  }
+
+  if (timing && "firstInteractionAt" in timing) {
     updates.first_interaction_at =
       timing.firstInteractionAt?.toISOString() ?? null;
+  }
+
+  if (timing?.stoppedAt) {
     updates.stopped_at =
       timing.stoppedAt.toISOString();
-    updates.reaction_ms = timing.reactionMs;
-    updates.stop_ms = timing.stopMs;
+  }
+
+  if (timing && "reactionMs" in timing) {
+    updates.reaction_ms = timing.reactionMs ?? null;
+  }
+
+  if (timing && "stopMs" in timing) {
+    updates.stop_ms = timing.stopMs ?? null;
   }
 
   const { error } = await supabase
@@ -698,10 +726,7 @@ export default function Home() {
     baseConfig: AlarmConfig,
     stage: 1 | 2 | 3
   ) => {
-    if (
-      firstInteractionAtRef.current ||
-      !historyIdRef.current
-    ) {
+    if (!historyIdRef.current) {
       return;
     }
 
@@ -717,7 +742,9 @@ export default function Home() {
         baseConfig.alarmFiredAt ??
         alarmFiredAtRef.current ??
         new Date(),
-      firstInteractionAt: undefined,
+      firstInteractionAt:
+        firstInteractionAtRef.current ??
+        baseConfig.firstInteractionAt,
     };
 
     setConfig(nextConfig);
@@ -728,7 +755,7 @@ export default function Home() {
     }
 
     // 同じ音を再スタートし、段階に応じた強さへ切り替える。
-    playAlarm(undefined, activeWakeStyle.id, stage);
+    playAlarm(baseConfig.alarmSoundId, activeWakeStyle.id, stage);
   };
 
   const scheduleAlarmStages = (
@@ -736,10 +763,7 @@ export default function Home() {
   ) => {
     clearAlarmStageTimers();
 
-    if (
-      activeConfig.mode !== "transit" ||
-      activeConfig.firstInteractionAt
-    ) {
+    if (activeConfig.mode !== "transit") {
       return;
     }
 
@@ -794,11 +818,39 @@ export default function Home() {
     }
   };
 
-  const expireAlarmAsMissed = () => {
+  const expireAlarmWithoutStop = (
+    expiredConfig: AlarmConfig
+  ) => {
     clearScheduleTimers();
+    stopAlarm();
 
     const historyId = historyIdRef.current;
     const insertPromise = historyInsertRef.current;
+    const alarmFiredAt =
+      expiredConfig.alarmFiredAt ??
+      alarmFiredAtRef.current;
+    const firstInteractionAt =
+      expiredConfig.firstInteractionAt ??
+      firstInteractionAtRef.current;
+    const status = alarmFiredAt
+      ? "unconfirmed"
+      : "missed";
+    const timing: AlarmTimingUpdate | undefined =
+      alarmFiredAt
+        ? {
+            alarmFiredAt,
+            firstInteractionAt,
+            reactionMs: firstInteractionAt
+              ? Math.max(
+                  0,
+                  Math.round(
+                    firstInteractionAt.getTime() -
+                      alarmFiredAt.getTime()
+                  )
+                )
+              : null,
+          }
+        : undefined;
 
     historyIdRef.current = null;
     historyInsertRef.current = null;
@@ -814,7 +866,8 @@ export default function Home() {
         if (insertPromise) await insertPromise;
         await updateAlarmHistoryStatus(
           historyId,
-          "missed"
+          status,
+          timing
         );
       })();
     }
@@ -825,7 +878,7 @@ export default function Home() {
       Date.now() - cfg.alarmTime.getTime();
 
     if (overdueMs > ALARM_FIRE_GRACE_PERIOD_MS) {
-      expireAlarmAsMissed();
+      expireAlarmWithoutStop(cfg);
       return;
     }
 
@@ -846,22 +899,17 @@ export default function Home() {
     const storedStage = cfg.alarmStage ?? 1;
     const alarmStage =
       cfg.mode === "transit"
-        ? cfg.firstInteractionAt
-          ? storedStage
-          : (Math.max(
-              storedStage,
-              elapsedStage
-            ) as 1 | 2 | 3)
+        ? (Math.max(
+            storedStage,
+            elapsedStage
+          ) as 1 | 2 | 3)
         : 1;
     const activeWakeStyle =
       cfg.mode === "transit"
-        ? cfg.firstInteractionAt &&
-          cfg.activeWakeStyle
-          ? cfg.activeWakeStyle
-          : getStageWakeStyle(
-              cfg.wakeStyle.id,
-              alarmStage
-            )
+        ? getStageWakeStyle(
+            cfg.wakeStyle.id,
+            alarmStage
+          )
         : cfg.wakeStyle;
     const activeConfig: AlarmConfig = {
       ...cfg,
@@ -883,7 +931,7 @@ export default function Home() {
       saveActiveAlarm(activeConfig, historyId);
     }
 
-    playAlarm(undefined, activeWakeStyle.id, alarmStage);
+    playAlarm(cfg.alarmSoundId, activeWakeStyle.id, alarmStage);
     scheduleAlarmStages(activeConfig);
     setScreen("alarm");
   };
@@ -935,18 +983,18 @@ export default function Home() {
     const overdueMs =
       Date.now() - restoredConfig.alarmTime.getTime();
 
-    if (overdueMs > ALARM_FIRE_GRACE_PERIOD_MS) {
-      clearActiveAlarm();
-      void updateAlarmHistoryStatus(historyId, "missed");
-      return;
-    }
-
     historyIdRef.current = historyId;
     historyInsertRef.current = null;
     alarmFiredAtRef.current =
       restoredConfig.alarmFiredAt ?? null;
     firstInteractionAtRef.current =
       restoredConfig.firstInteractionAt ?? null;
+
+    if (overdueMs > ALARM_FIRE_GRACE_PERIOD_MS) {
+      expireAlarmWithoutStop(restoredConfig);
+      return;
+    }
+
     setSetupMode(
       restoredConfig.mode === "break"
         ? "break"
@@ -974,6 +1022,8 @@ export default function Home() {
       });
     }
 
+    setAlarmSoundId(restoredConfig.alarmSoundId);
+    storeAlarmSound(restoredConfig.alarmSoundId);
     setEarphoneConnected(
       restoredConfig.earphoneConnected
     );
@@ -1407,6 +1457,7 @@ const handleToggleTodaySkip = (
       arrivalTime: input.arrivalTime,
       leadTime,
       wakeStyle,
+      alarmSoundId,
       alarmTime,
       demoMode: {
         id: "normal",
@@ -1441,6 +1492,7 @@ const handleToggleTodaySkip = (
       arrivalTime: alarmTime,
       leadTime: BREAK_END_LEAD_TIME,
       wakeStyle,
+      alarmSoundId,
       alarmTime,
       demoMode: {
         id: "normal",
@@ -1488,7 +1540,6 @@ const handleToggleTodaySkip = (
   const handleFirstInteraction = () => {
     if (firstInteractionAtRef.current) return;
 
-    clearAlarmStageTimers();
     const firstInteractionAt = new Date();
     firstInteractionAtRef.current = firstInteractionAt;
 
@@ -1709,6 +1760,14 @@ const handleToggleTodaySkip = (
     setAdaptiveAlarmPlan(
       DEFAULT_ADAPTIVE_ALARM_PLAN
     );
+  };
+
+  const handleHistoryCleared = async () => {
+    setAdaptiveAlarmPlan(
+      DEFAULT_ADAPTIVE_ALARM_PLAN
+    );
+    setImmediateRecommendation(null);
+    await refreshAdaptiveAlarmPlan();
   };
 
   const handleResetAdaptiveAlarm = () => {
@@ -1950,7 +2009,9 @@ const handleToggleTodaySkip = (
               ))}
 
             {tab === "history" && (
-              <HistoryScreen />
+              <HistoryScreen
+                onHistoryCleared={handleHistoryCleared}
+              />
             )}
 
             {tab === "settings" &&

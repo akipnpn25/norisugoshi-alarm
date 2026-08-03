@@ -1,5 +1,6 @@
 import { DEFAULT_WAKE_STYLE_ID, WAKE_STYLES } from "./data";
-import type { AlarmConfig } from "./types";
+import { ALARM_SOUNDS, getStoredAlarmSound } from "./sound";
+import type { AlarmConfig, AlarmSoundId } from "./types";
 
 export const ACTIVE_ALARM_STORAGE_KEY =
   "norisugoshi_active_alarm";
@@ -10,6 +11,7 @@ export interface StoredActiveAlarm {
   arrivalTime: string;
   leadTime: AlarmConfig["leadTime"];
   wakeStyle?: AlarmConfig["wakeStyle"];
+  alarmSoundId?: AlarmSoundId;
   alarmTime: string;
   demoMode: AlarmConfig["demoMode"];
   earphoneConnected: boolean;
@@ -40,6 +42,7 @@ export function saveActiveAlarm(
     arrivalTime: config.arrivalTime.toISOString(),
     leadTime: config.leadTime,
     wakeStyle: config.wakeStyle,
+    alarmSoundId: config.alarmSoundId,
     alarmTime: config.alarmTime.toISOString(),
     demoMode: config.demoMode,
     earphoneConnected: config.earphoneConnected,
@@ -112,6 +115,13 @@ export function loadActiveAlarm(): {
       stored.firstInteractionAt
         ? new Date(stored.firstInteractionAt)
         : undefined;
+    const alarmSoundId =
+      stored.alarmSoundId &&
+      ALARM_SOUNDS.some(
+        (sound) => sound.id === stored.alarmSoundId
+      )
+        ? stored.alarmSoundId
+        : getStoredAlarmSound();
 
     const invalidBase =
       !stored.station ||
@@ -197,6 +207,7 @@ export function loadActiveAlarm(): {
         arrivalTime,
         leadTime: stored.leadTime,
         wakeStyle: stored.wakeStyle ?? fallbackWakeStyle,
+        alarmSoundId,
         alarmTime,
         demoMode: stored.demoMode,
         earphoneConnected: Boolean(

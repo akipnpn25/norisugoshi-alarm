@@ -4,10 +4,12 @@ import { useEffect, useState } from "react";
 import {
   CalendarDays,
   CheckCircle2,
+  Info,
   TriangleAlert,
 } from "lucide-react";
 
 import { Card } from "@/src/components/ui/card";
+import { loadAdaptiveAlarmSettings } from "@/src/lib/adaptive-alarm-settings";
 import { ensureAnonymousSession } from "@/src/lib/auth";
 import {
   buildWeeklySummary,
@@ -22,6 +24,9 @@ export function WeeklyReportCard() {
   const [summary, setSummary] =
     useState<WeeklySummary | null>(null);
   const [error, setError] = useState(false);
+  const [adaptiveEnabled, setAdaptiveEnabled] = useState(
+    () => loadAdaptiveAlarmSettings().enabled
+  );
 
   useEffect(() => {
     void load();
@@ -29,6 +34,7 @@ export function WeeklyReportCard() {
 
   const load = async () => {
     setError(false);
+    setAdaptiveEnabled(loadAdaptiveAlarmSettings().enabled);
 
     try {
       await ensureAnonymousSession();
@@ -121,7 +127,18 @@ export function WeeklyReportCard() {
                 時間内に反応できました
               </p>
 
-              {summary.late === 0 ? (
+              {!adaptiveEnabled ? (
+                <div className="mt-3 flex items-start gap-2 rounded-2xl bg-muted/40 px-3 py-2.5">
+                  <Info
+                    size={17}
+                    className="mt-0.5 shrink-0 text-muted-foreground"
+                  />
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    スマート調整はOFFです。
+                    学習によるおすすめは表示されません。
+                  </p>
+                </div>
+              ) : summary.late === 0 ? (
                 <div className="mt-3 flex items-start gap-2 rounded-2xl bg-success/10 px-3 py-2.5">
                   <CheckCircle2
                     size={17}
@@ -139,9 +156,8 @@ export function WeeklyReportCard() {
                     className="mt-0.5 shrink-0 text-moon"
                   />
                   <p className="text-xs leading-relaxed text-muted-foreground">
-                    {summary.late}回遅れがありました。
-                    次回は少し強い起こし方を
-                    試すのがおすすめです。
+                    今週は{summary.late}回遅れがありました。
+                    次回は少し強い起こし方がおすすめです。
                   </p>
                 </div>
               )}

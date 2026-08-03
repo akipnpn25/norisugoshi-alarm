@@ -62,6 +62,7 @@ export interface AlarmConfig {
   arrivalTime: Date;
   leadTime: LeadTimeOption;
   wakeStyle: WakeStyleOption;
+  alarmSoundId: AlarmSoundId;
   alarmTime: Date;
   demoMode: DemoModeOption;
   earphoneConnected: boolean;

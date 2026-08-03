@@ -30,6 +30,7 @@ const STATUS_LABEL: Record<string, string> = {
   fired: "鳴動済み",
   cancelled: "取り消し",
   missed: "未実行",
+  unconfirmed: "停止未確認",
 };
 
 function wakeStyleLabel(
@@ -42,7 +43,13 @@ function wakeStyleLabel(
   );
 }
 
-export function HistoryScreen() {
+interface HistoryScreenProps {
+  onHistoryCleared?: () => void | Promise<void>;
+}
+
+export function HistoryScreen({
+  onHistoryCleared,
+}: HistoryScreenProps) {
   const [rows, setRows] =
     useState<AlarmHistoryRow[] | null>(null);
   const [error, setError] =
@@ -114,6 +121,7 @@ export function HistoryScreen() {
     }
 
     setRows([]);
+    await onHistoryCleared?.();
   };
 
   return (

@@ -15,6 +15,7 @@ import {
 import { Button } from "@/src/components/ui/button";
 import { Card } from "@/src/components/ui/card";
 import { Progress } from "@/src/components/ui/progress";
+import { ALARM_SOUNDS } from "@/src/lib/sound";
 import type { AlarmConfig } from "@/src/lib/types";
 import {
   formatRemaining,
@@ -39,6 +40,10 @@ export function RestScreen({
   );
   const isBreak = config.mode === "break";
   const destinationName = config.station.name.trim();
+  const alarmSoundLabel =
+    ALARM_SOUNDS.find(
+      (sound) => sound.id === config.alarmSoundId
+    )?.label ?? "ラジアル";
   const isDemo = config.demoMode.offsetSeconds !== null;
 
   useEffect(() => {
@@ -113,6 +118,13 @@ export function RestScreen({
           icon={<Bell size={22} />}
           label="起こし方"
           value={config.wakeStyle.label}
+          ok
+        />
+        <Divider />
+        <StatusRow
+          icon={<Bell size={22} />}
+          label="アラーム音"
+          value={alarmSoundLabel}
           ok
         />
 

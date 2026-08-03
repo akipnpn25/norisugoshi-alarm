@@ -29,6 +29,7 @@ import {
 } from "@/src/components/TimeWheelPicker";
 import {
   BREAK_DURATION_OPTIONS,
+  DEFAULT_LEAD_TIME_ID,
   DEFAULT_WAKE_STYLE_ID,
   LEAD_TIMES,
   WAKE_STYLES,
@@ -138,6 +139,17 @@ function toTimeValue(hour: number, minute: number): string {
   ).padStart(2, "0")}`;
 }
 
+function getBlankQuickSettingArrival(now: Date): {
+  hour: number;
+  minute: number;
+} {
+  const arrival = new Date(now);
+  arrival.setMinutes(arrival.getMinutes() + 30);
+  arrival.setSeconds(0, 0);
+
+  return { hour: arrival.getHours(), minute: arrival.getMinutes() };
+}
+
 function parseTimeValue(value: string): {
   hour: number;
   minute: number;
@@ -228,18 +240,20 @@ export function ScheduleScreen({
   );
 
   const openNewQuickSetting = () => {
+    const defaultArrival = getBlankQuickSettingArrival(now);
+
     setEditingQuick({
       id: null,
       name: "",
       mode: "transit",
-      destination: transitDefaults.station?.name ?? "",
+      destination: "",
       arrivalTime: toTimeValue(
-        transitDefaults.arrivalHour,
-        transitDefaults.arrivalMinute
+        defaultArrival.hour,
+        defaultArrival.minute
       ),
-      leadTimeId: transitDefaults.leadTimeId,
-      warningEnabled: breakDefaults.warningEnabled,
-      wakeStyleId: transitDefaults.wakeStyleId,
+      leadTimeId: DEFAULT_LEAD_TIME_ID,
+      warningEnabled: false,
+      wakeStyleId: DEFAULT_WAKE_STYLE_ID,
       alarmSoundId,
       createdAt: null,
     });
